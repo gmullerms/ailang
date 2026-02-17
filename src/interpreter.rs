@@ -939,6 +939,79 @@ impl Interpreter {
                     _ => Some(Value::Bool(false)),
                 }
             }
+            "mget" => {
+                if let (Value::Map(pairs), key) = (&args[0], &args[1]) {
+                    let found = pairs.iter().find(|(k, _)| match (k, key) {
+                        (Value::Int(a), Value::Int(b)) => a == b,
+                        (Value::Text(a), Value::Text(b)) => a == b,
+                        (Value::Bool(a), Value::Bool(b)) => a == b,
+                        _ => false,
+                    });
+                    Some(found.map(|(_, v)| v.clone()).unwrap_or(Value::Null))
+                } else {
+                    return Err(RuntimeError { message: "mget requires a map and key".to_string() });
+                }
+            }
+            "mset" => {
+                if let (Value::Map(pairs), key, val) = (&args[0], &args[1], &args[2]) {
+                    let mut new_pairs: Vec<(Value, Value)> = pairs.iter()
+                        .filter(|(k, _)| match (k, key) {
+                            (Value::Int(a), Value::Int(b)) => a != b,
+                            (Value::Text(a), Value::Text(b)) => a != b,
+                            (Value::Bool(a), Value::Bool(b)) => a != b,
+                            _ => true,
+                        })
+                        .cloned()
+                        .collect();
+                    new_pairs.push((key.clone(), val.clone()));
+                    Some(Value::Map(new_pairs))
+                } else {
+                    return Err(RuntimeError { message: "mset requires a map, key, and value".to_string() });
+                }
+            }
+            "mdel" => {
+                if let (Value::Map(pairs), key) = (&args[0], &args[1]) {
+                    let new_pairs: Vec<(Value, Value)> = pairs.iter()
+                        .filter(|(k, _)| match (k, key) {
+                            (Value::Int(a), Value::Int(b)) => a != b,
+                            (Value::Text(a), Value::Text(b)) => a != b,
+                            (Value::Bool(a), Value::Bool(b)) => a != b,
+                            _ => true,
+                        })
+                        .cloned()
+                        .collect();
+                    Some(Value::Map(new_pairs))
+                } else {
+                    return Err(RuntimeError { message: "mdel requires a map and key".to_string() });
+                }
+            }
+            "mkeys" => {
+                if let Value::Map(pairs) = &args[0] {
+                    Some(Value::List(pairs.iter().map(|(k, _)| k.clone()).collect()))
+                } else {
+                    return Err(RuntimeError { message: "mkeys requires a map".to_string() });
+                }
+            }
+            "mvals" => {
+                if let Value::Map(pairs) = &args[0] {
+                    Some(Value::List(pairs.iter().map(|(_, v)| v.clone()).collect()))
+                } else {
+                    return Err(RuntimeError { message: "mvals requires a map".to_string() });
+                }
+            }
+            "mhas" => {
+                if let (Value::Map(pairs), key) = (&args[0], &args[1]) {
+                    let found = pairs.iter().any(|(k, _)| match (k, key) {
+                        (Value::Int(a), Value::Int(b)) => a == b,
+                        (Value::Text(a), Value::Text(b)) => a == b,
+                        (Value::Bool(a), Value::Bool(b)) => a == b,
+                        _ => false,
+                    });
+                    Some(Value::Bool(found))
+                } else {
+                    return Err(RuntimeError { message: "mhas requires a map and key".to_string() });
+                }
+            }
             _ => None,
         };
         Ok(result)

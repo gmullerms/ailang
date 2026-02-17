@@ -309,14 +309,14 @@ shr a n
 
 ### 5.9 Map Operations
 
-| Operation          | Description                        | Status  |
-|--------------------|------------------------------------|---------|
-| `call mget m key`  | Get value (?V, optional)           | Planned |
-| `call mset m key val` | Return new map with key set     | Planned |
-| `call mdel m key`  | Return new map with key removed    | Planned |
-| `call mkeys m`     | List of keys                       | Planned |
-| `call mvals m`     | List of values                     | Planned |
-| `call mhas m key`  | Bool                               | Planned |
+| Operation          | Description                        | Status      |
+|--------------------|------------------------------------|-------------|
+| `call mget m key`  | Get value (null if not found)      | Implemented |
+| `call mset m key val` | Return new map with key set     | Implemented |
+| `call mdel m key`  | Return new map with key removed    | Implemented |
+| `call mkeys m`     | List of keys                       | Implemented |
+| `call mvals m`     | List of values                     | Implemented |
+| `call mhas m key`  | Bool                               | Implemented |
 
 ### 5.10 Type Operations
 
@@ -761,7 +761,7 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Type system: all primitives parsed, compound types parsed, `cast` executed
 - Error handling: `try`, `unwrap`, `ok` wrap
 - Agent primitives: `tool` (stub), `log` (stderr output)
-- 28 built-in functions (see sections 5.5–5.8)
+- 34 built-in functions (see sections 5.5–5.9)
 - Lambdas/closures with environment capture
 - Grouped sub-expressions
 - Tests with `assert`
@@ -773,7 +773,6 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Module system: `#use` loading, visibility rules
 - Agent primitives: `prompt`/`prompt_json`, `store_get`/`store_set`/`store_del`, `observe`
 - JSON operations: `jget`, `jset`, `jstr`, `jparse`
-- Map operations: `mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
 - Additional builtins: `find`, `replace`, `set`, `pop`, `typeof`, `is`
 - Error propagation: `?` operator
 - Byte literals
