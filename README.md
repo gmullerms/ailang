@@ -1,0 +1,202 @@
+# AILang
+
+A programming language designed for AI agents to write, read, and maintain code. Not for humans.
+
+AILang optimizes for how LLMs actually process tokens: SSA variables (`v0`, `v1`, `v2`), prefix notation, flat structure, canonical form, and explicit types on every line. See [MANIFESTO.md](MANIFESTO.md) for why this matters.
+
+## Prerequisites
+
+### Rust Toolchain
+
+AILang is implemented in Rust. You need Rust 1.85+ (edition 2024).
+
+**Windows (winget):**
+```
+winget install Rustlang.Rustup
+```
+
+**macOS / Linux:**
+```
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+After installing, verify:
+```
+rustc --version
+cargo --version
+```
+
+### C/C++ Linker (Windows only)
+
+Rust needs a C linker. If you have Visual Studio installed, make sure the **C++ Build Tools** workload is included. If not:
+
+```
+winget install Microsoft.VisualStudio.2022.BuildTools
+```
+
+Then open **Visual Studio Installer** and add the **Desktop development with C++** workload.
+
+## Build
+
+```
+git clone <repo-url>
+cd ailang
+cargo build
+```
+
+The binary is at `target/debug/ailang` (or `target/debug/ailang.exe` on Windows).
+
+For an optimized build (faster execution, smaller stack usage):
+```
+cargo build --release
+```
+
+Release binary: `target/release/ailang`.
+
+## Usage
+
+### Run a program
+```
+./target/debug/ailang examples/hello.ai
+```
+
+### Run tests
+```
+./target/debug/ailang test examples/hello.ai
+```
+
+Both modes execute the `#test` blocks. In test mode, `#entry` also runs after tests.
+
+### Example output
+```
+$ ./target/debug/ailang test examples/hello.ai
+running tests...
+  PASS: add_basic
+  PASS: add_negative
+  PASS: square_works
+  PASS: abs_positive
+  PASS: abs_negative
+[info] greeting: Hello AILang
+[info] 10 + 20 = 30
+[info] 7 squared = 49
+[info] abs(-42) = 42
+[info] squares: [1 4 9 16 25]
+[info] sum 1..5 = 15
+```
+
+## Project Structure
+
+```
+ailang/
+  src/
+    token.rs        -- Token types (sigils, keywords, operators, literals)
+    lexer.rs        -- Tokenizer (source text -> token stream)
+    parser.rs       -- Recursive descent parser (tokens -> AST)
+    ast.rs          -- AST type definitions
+    interpreter.rs  -- Tree-walking interpreter with built-in functions
+    main.rs         -- CLI entry point
+  examples/
+    hello.ai            -- Introduction: add, square, abs, map, fold
+    01_two_sum.ai       -- LeetCode #1: recursive pair search
+    02_fizzbuzz.ai      -- FizzBuzz with map + select chain
+    03_palindrome_number.ai  -- chars -> reverse -> join comparison
+    04_reverse_integer.ai    -- abs, chars, reverse, join, cast
+    05_fibonacci.ai     -- fold with [a b] accumulator
+    06_max_subarray.ai  -- Kadane's algorithm via fold
+    07_valid_parentheses.ai  -- fold with list-as-stack
+    08_merge_sorted_lists.ai -- recursive merge with lazy select
+    09_climbing_stairs.ai    -- fold with [prev curr] accumulator
+    10_contains_duplicate.ai -- sort then recursive adjacent check
+  SPEC.md           -- Full language specification
+  MANIFESTO.md      -- Why AILang is better for LLMs than human languages
+```
+
+## Language Quick Start
+
+### Hello World
+```
+#fn greet :text name:text
+  = call concat "Hello " name
+
+#entry
+  v0 :text = call greet "AILang"
+  log "info" "{0}" v0
+  = 0
+```
+
+### Key Syntax Rules
+
+Every function starts with `#fn` at column 0. Body is indented 2 spaces:
+```
+#fn add :i32 a:i32 b:i32
+  = + a b
+```
+
+Intermediate values use SSA naming (`v0`, `v1`, `v2`, ...):
+```
+#fn hypotenuse :f64 a:f64 b:f64
+  v0 :f64 = * a a
+  v1 :f64 = * b b
+  v2 :f64 = + v0 v1
+  = call sqrt v2
+```
+
+All operations are prefix notation:
+```
+v0 :i32 = + 3 5        -- add
+v1 :bool = > v0 4      -- compare
+v2 :i32 = % v0 3       -- modulo
+```
+
+Conditionals use `select` (lazy — only evaluates the taken branch):
+```
+v0 :i32 = select (> x 0) x (neg x)
+```
+
+Iteration is functional — no loops:
+```
+v0 :[i32] = map (fn x:i32 => * x x) nums
+v1 :i32 = fold nums 0 (fn acc:i32 x:i32 => + acc x)
+v2 :[i32] = filter (fn x:i32 => > x 0) nums
+```
+
+Sub-expressions as arguments need `()` grouping:
+```
+v0 :i32 = call foo (+ a 1) (call bar x)
+```
+
+**Every statement is one line.** No exceptions.
+
+### For AI Code Generators
+
+Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most common mistakes:
+
+1. **Multi-statement lambdas** — lambdas are `(fn params => SINGLE_EXPR)`, not blocks
+2. **Multi-line statements** — `select`, `fold`, `map` args must all be on one line
+3. **Recursive calls in binds** — binds execute eagerly; put recursive calls inside `select` branches
+
+## Built-in Functions
+
+### Math
+`abs`, `min`, `max`, `sqrt`
+
+### Text
+`concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`
+
+### List
+`len`, `get`, `push`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+
+### Map
+`mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
+
+### I/O
+`print`, `log`
+
+## Docs
+
+- **[SPEC.md](SPEC.md)** — Full language specification with grammar, types, operations, and code generation guide
+- **[MANIFESTO.md](MANIFESTO.md)** — Why human programming languages are wrong for AI, with side-by-side comparisons
+
+## License
+
+MIT
