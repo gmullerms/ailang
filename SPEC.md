@@ -778,3 +778,279 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Error propagation: `?` operator
 - Byte literals
 - Compiler backend (bytecode or native)
+
+---
+
+## 17. Code Generation Guide: Patterns and Anti-Patterns
+
+This section exists because AI models trained on human languages will instinctively generate AILang as if it were Python or JavaScript with different syntax. **AILang requires a fundamentally different approach.** Read this section before generating any code.
+
+### 17.1 CRITICAL: Lambdas Are Single Expressions
+
+A lambda body is **one expression**, not a block of statements. There are no multi-line lambdas. There are no bind statements inside lambdas.
+
+**WRONG — multi-statement lambda (parse error):**
+```
+v0 :[i32] = map (fn x:i32 =>
+  v1 :i32 = * x x
+  v2 :i32 = + v1 1
+  v2
+) nums
+```
+
+**RIGHT — single expression lambda:**
+```
+v0 :[i32] = map (fn x:i32 => + (* x x) 1) nums
+```
+
+**RIGHT — extract complex logic into a named function:**
+```
+#fn square_plus_one :i32 x:i32
+  v0 :i32 = * x x
+  v1 :i32 = + v0 1
+  = v1
+
+-- then use as reference:
+v0 :[i32] = map square_plus_one nums
+```
+
+**Rule:** If a lambda needs more than one operation, extract a `#fn` and pass it by name.
+
+### 17.2 CRITICAL: No Nesting — Decompose Into Flat Functions
+
+AILang has a maximum nesting depth of 1. Never put a `map` inside a `map`, a `select` inside a lambda inside a `fold`, or any similar nesting of complex logic.
+
+**WRONG — nested iteration (the "Python translation" mistake):**
+```
+#fn find_pairs :[i32] nums:[i32] target:i32
+  v0 :[i32] = call range 0 (call len nums)
+  v1 :[[i32]] = map (fn i:i32 =>
+    v2 :[i32] = call range (+ i 1) (call len nums)
+    v3 :[[i32]] = map (fn j:i32 =>
+      select (== (+ (call get nums i) (call get nums j)) target)
+        [i j] [-1 -1]
+    ) v2
+    v3
+  ) v0
+  ...
+```
+
+**RIGHT — decompose into separate functions:**
+```
+#fn check_pair :bool nums:[i32] i:i32 j:i32 target:i32
+  v0 :i32 = call get nums i
+  v1 :i32 = call get nums j
+  = == (+ v0 v1) target
+
+#fn search_from :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
+  v0 :bool = >= j size
+  v1 :i32 = select v0
+    (call next_i nums target i size)
+    (call try_pair nums target i j size)
+  = v1
+
+#fn try_pair :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
+  v0 :bool = call check_pair nums i j target
+  = select v0 i (call search_from nums target i (+ j 1) size)
+
+#fn next_i :i32 nums:[i32] target:i32 i:i32 size:i32
+  v0 :i32 = + i 1
+  v1 :bool = >= v0 size
+  = select v1 -1 (call search_from nums target v0 (+ v0 1) size)
+```
+
+**Rule:** When you catch yourself nesting, stop. Create a new `#fn`. Each function should be flat — a sequence of binds followed by a return. Recursion replaces loops; named functions replace nested lambdas.
+
+### 17.3 Statements vs Expressions
+
+Only `#fn`, `#entry`, and `#test` blocks contain statements. Everywhere else (lambda bodies, `select` branches, `match` arms, function arguments) expects **expressions**.
+
+**Statements** (only inside block bodies):
+```
+v0 :i32 = + a b          -- bind
+= v0                      -- return
+> v0                      -- emit
+log "info" "msg"          -- effect
+assert == v0 5            -- effect
+```
+
+**Expressions** (anywhere a value is needed):
+```
++ a b                     -- binary op
+call foo x y              -- function call
+select cond a b           -- conditional
+(fn x:i32 => * x x)      -- lambda
+42                        -- literal
+v0                        -- variable reference
+```
+
+**WRONG — bind statement used as select branch:**
+```
+v0 :i32 = select cond (v1 :i32 = + a b) (v2 :i32 = + a c)
+```
+
+**RIGHT — expressions in select branches:**
+```
+v0 :i32 = select cond (+ a b) (+ a c)
+```
+
+### 17.4 Use Lists, Not Tuples, for Indexed Data
+
+The `get` builtin works on **lists**, not tuples. When you need indexed access to a compound accumulator, use a list.
+
+**WRONG — tuple with `get`:**
+```
+v0 :(i32 i32) = (0 1)
+v1 :i32 = call get v0 0       -- ERROR: get requires a list
+```
+
+**RIGHT — list with `get`:**
+```
+v0 :[i32] = [0 1]
+v1 :i32 = call get v0 0       -- OK: returns 0
+v2 :i32 = call get v0 1       -- OK: returns 1
+```
+
+This pattern is especially common in `fold` accumulators:
+```
+-- fold with multi-value accumulator using a list
+v0 :[i32] = fold nums [0 0] (fn acc:[i32] x:i32 =>
+  [
+    (call max (call get acc 0) x)
+    (+ (call get acc 1) x)
+  ])
+```
+
+### 17.5 Grouped Expressions for Sub-Expression Arguments
+
+When passing a compound expression (operator, call, select) as an argument, wrap it in `()`. Without grouping, the parser consumes atoms greedily and misinterprets boundaries.
+
+**WRONG — bare operator as argument:**
+```
+v0 :i32 = call foo + a 1 b        -- parses as: call foo (+) a 1 b ??
+```
+
+**RIGHT — grouped sub-expression:**
+```
+v0 :i32 = call foo (+ a 1) b      -- clear: arg1 = (+ a 1), arg2 = b
+```
+
+**More examples:**
+```
+v0 :bool = == (call len lst) 0           -- compare result of call
+v1 :i32 = call max (+ x 5) (- y 3)      -- two computed args
+v2 :[i32] = call range 0 (call len nums) -- nested call as arg
+```
+
+**Rule:** If an argument to `call`, `select`, `map`, etc. is anything other than a literal or variable, wrap it in `()`.
+
+### 17.6 Recursion Replaces Loops
+
+AILang has no `for`, `while`, or loop constructs. Use either functional iteration (`map`/`filter`/`fold`) or recursion with `select` for termination.
+
+**Pattern — iterating with index (use recursion):**
+```
+#fn find_index :i32 lst:[i32] target:i32 i:i32
+  v0 :bool = >= i (call len lst)
+  v1 :bool = select v0 false (== (call get lst i) target)
+  = select v0 -1 (select v1 i (call find_index lst target (+ i 1)))
+```
+
+**Pattern — accumulating a result (use fold):**
+```
+#fn sum :i32 nums:[i32]
+  = fold nums 0 (fn acc:i32 x:i32 => + acc x)
+```
+
+**Pattern — transforming each element (use map):**
+```
+#fn double_all :[i32] nums:[i32]
+  = map (fn x:i32 => * x 2) nums
+```
+
+**Pattern — conditional recursion (separate functions for branches):**
+
+When `select` branches contain recursive calls, extract each branch into its own `#fn`. This avoids deeply nested grouped expressions and keeps each function readable.
+
+```
+-- WRONG — deeply nested select with recursive calls inline:
+v0 :i32 = select cond1 (select cond2 (call recurse_a x) (call recurse_b x)) (call recurse_c x)
+
+-- RIGHT — one function per branch:
+#fn handle_case :i32 x:i32 cond1:bool cond2:bool
+  = select cond1 (call handle_true x cond2) (call recurse_c x)
+
+#fn handle_true :i32 x:i32 cond2:bool
+  = select cond2 (call recurse_a x) (call recurse_b x)
+```
+
+### 17.7 SSA Naming Convention
+
+Variable names inside blocks are always `v0`, `v1`, `v2`, ... in strictly incrementing order. Never skip numbers. Never reuse numbers. Never use descriptive names for intermediates.
+
+**WRONG:**
+```
+#fn calc :i32 x:i32
+  result :i32 = * x x         -- descriptive name
+  total :i32 = + result 1     -- descriptive name
+  = total
+```
+
+**WRONG:**
+```
+#fn calc :i32 x:i32
+  v0 :i32 = * x x
+  v5 :i32 = + v0 1            -- skipped v1-v4
+  = v5
+```
+
+**RIGHT:**
+```
+#fn calc :i32 x:i32
+  v0 :i32 = * x x
+  v1 :i32 = + v0 1
+  = v1
+```
+
+Parameters use short names: `a`, `b`, `x`, `n`, `lst`, `acc`, `idx`, `nums`, `target`, `size`.
+
+### 17.8 Function Order: Dependencies First, Entry Last
+
+Functions must be defined before they are called. Helper functions come first, higher-level functions come next, tests come after functions, and `#entry` is always last.
+
+```
+-- 1. Helpers (leaf functions, no dependencies)
+#fn helper_a :i32 x:i32
+  = + x 1
+
+-- 2. Functions that use helpers
+#fn process :i32 x:i32
+  v0 :i32 = call helper_a x
+  = * v0 2
+
+-- 3. Tests
+#test process_works
+  assert == (call process 5) 12
+
+-- 4. Entry (always last)
+#entry
+  v0 :i32 = call process 10
+  log "info" "result: {0}" v0
+  = 0
+```
+
+### 17.9 Quick Reference: "If I Want X, I Write Y"
+
+| I want...                          | I write...                                                |
+|------------------------------------|-----------------------------------------------------------|
+| A for loop                         | `map`, `filter`, `fold`, or recursion                     |
+| An if/else                         | `select cond then_val else_val`                           |
+| A nested loop                      | Multiple `#fn` with recursion                             |
+| A multi-statement lambda           | Extract a `#fn`, pass by name                             |
+| A variable with a descriptive name | `v0`, `v1`, `v2` (SSA)                                   |
+| Indexed access to a pair           | `[a b]` list + `call get lst 0`                           |
+| A computed argument                | `(+ a b)` grouped expression                              |
+| Early return / break               | `select` to choose between base case and recursion        |
+| Mutable accumulator                | `fold` with list accumulator `[val1 val2]`                |
+| String building in a loop          | `fold` with text accumulator + `concat`                   |
+| Nested conditionals                | Chain of `select` or separate `#fn` per branch            |
