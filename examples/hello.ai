@@ -1,0 +1,57 @@
+#fn add :i32 a:i32 b:i32
+  = + a b
+
+#fn square :i32 x:i32
+  = * x x
+
+#fn abs :i32 x:i32
+  v0 :bool = < x 0
+  v1 :i32 = neg x
+  v2 :i32 = select v0 v1 x
+  = v2
+
+#fn factorial :i32 n:i32
+  v0 :bool = <= n 1
+  v1 :[i32] = call range 1 n
+  v2 :i32 = fold v1 1 (fn a:i32 b:i32 => * a + b 1)
+  v3 :i32 = select v0 1 v2
+  = v3
+
+#fn greet :text name:text
+  = call concat "Hello " name
+
+#test add_basic
+  v0 :i32 = call add 2 3
+  assert == v0 5
+
+#test add_negative
+  v0 :i32 = call add -1 1
+  assert == v0 0
+
+#test square_works
+  v0 :i32 = call square 4
+  assert == v0 16
+
+#test abs_positive
+  v0 :i32 = call abs 5
+  assert == v0 5
+
+#test abs_negative
+  v0 :i32 = call abs -3
+  assert == v0 3
+
+#entry
+  v0 :text = call greet "AILang"
+  v1 :i32 = call add 10 20
+  v2 :i32 = call square 7
+  v3 :i32 = call abs -42
+  log "info" "greeting: {0}" v0
+  log "info" "10 + 20 = {0}" v1
+  log "info" "7 squared = {0}" v2
+  log "info" "abs(-42) = {0}" v3
+  v4 :[i32] = [1 2 3 4 5]
+  v5 :[i32] = map square v4
+  log "info" "squares: {0}" v5
+  v6 :i32 = fold v4 0 add
+  log "info" "sum 1..5 = {0}" v6
+  = 0

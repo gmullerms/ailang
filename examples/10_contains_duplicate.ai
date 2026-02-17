@@ -1,0 +1,55 @@
+-- LeetCode #217: Contains Duplicate
+-- Sort then check adjacent elements
+
+#fn check_adjacent :bool nums:[i32] i:i32 size:i32
+  v0 :i32 = - size 1
+  v1 :bool = >= i v0
+  v2 :bool = select v1 false (call check_pair nums i size)
+  = v2
+
+#fn check_pair :bool nums:[i32] i:i32 size:i32
+  v0 :i32 = call get nums i
+  v1 :i32 = (+ i 1)
+  v2 :i32 = call get nums v1
+  v3 :bool = == v0 v2
+  v4 :bool = select v3 true (call check_adjacent nums v1 size)
+  = v4
+
+#fn contains_duplicate :bool nums:[i32]
+  v0 :i32 = call len nums
+  v1 :bool = <= v0 1
+  v2 :[i32] = call sort nums
+  v3 :bool = select v1 false (call check_adjacent v2 0 v0)
+  = v3
+
+#test dup_true
+  v0 :[i32] = [1 2 3 1]
+  assert call contains_duplicate v0
+
+#test dup_false
+  v0 :[i32] = [1 2 3 4]
+  v1 :bool = call contains_duplicate v0
+  assert not v1
+
+#test dup_many
+  v0 :[i32] = [1 1 1 3 3 4 3 2 4 2]
+  assert call contains_duplicate v0
+
+#test dup_empty
+  v0 :[i32] = []
+  v1 :bool = call contains_duplicate v0
+  assert not v1
+
+#test dup_single
+  v0 :[i32] = [1]
+  v1 :bool = call contains_duplicate v0
+  assert not v1
+
+#entry
+  v0 :bool = call contains_duplicate [1 2 3 1]
+  v1 :bool = call contains_duplicate [1 2 3 4]
+  v2 :bool = call contains_duplicate [1 1 1 3 3 4 3 2 4 2]
+  log "info" "contains_dup([1 2 3 1]) = {0}" v0
+  log "info" "contains_dup([1 2 3 4]) = {0}" v1
+  log "info" "contains_dup([1 1 1 3 3 4 3 2 4 2]) = {0}" v2
+  = 0

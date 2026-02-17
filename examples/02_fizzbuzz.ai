@@ -1,0 +1,38 @@
+-- LeetCode #412: FizzBuzz
+
+#fn fizzbuzz_one :text n:i32
+  v0 :bool = == (% n 15) 0
+  v1 :bool = == (% n 3) 0
+  v2 :bool = == (% n 5) 0
+  v3 :text = call to_text n
+  v4 :text = select v2 "Buzz" v3
+  v5 :text = select v1 "Fizz" v4
+  v6 :text = select v0 "FizzBuzz" v5
+  = v6
+
+#fn fizzbuzz :[text] n:i32
+  v0 :i32 = + n 1
+  v1 :[i32] = call range 1 v0
+  v2 :[text] = map fizzbuzz_one v1
+  = v2
+
+#test fizzbuzz_15
+  v0 :[text] = call fizzbuzz 15
+  v1 :text = call get v0 0
+  assert == v1 "1"
+  v2 :text = call get v0 2
+  assert == v2 "Fizz"
+  v3 :text = call get v0 4
+  assert == v3 "Buzz"
+  v4 :text = call get v0 14
+  assert == v4 "FizzBuzz"
+
+#test fizzbuzz_5
+  v0 :[text] = call fizzbuzz 5
+  v1 :i32 = call len v0
+  assert == v1 5
+
+#entry
+  v0 :[text] = call fizzbuzz 20
+  log "info" "FizzBuzz 1..20: {0}" v0
+  = 0

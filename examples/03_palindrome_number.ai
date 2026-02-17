@@ -1,0 +1,38 @@
+-- LeetCode #9: Palindrome Number
+-- Check if an integer reads the same forward and backward
+
+#fn is_palindrome :bool n:i32
+  v0 :bool = < n 0
+  v1 :text = call to_text n
+  v2 :[text] = call chars v1
+  v3 :[text] = call reverse v2
+  v4 :text = call join v3 ""
+  v5 :bool = == v1 v4
+  v6 :bool = select v0 false v5
+  = v6
+
+#test palindrome_121
+  assert call is_palindrome 121
+
+#test palindrome_negative
+  v0 :bool = call is_palindrome -121
+  assert not v0
+
+#test palindrome_10
+  v0 :bool = call is_palindrome 10
+  assert not v0
+
+#test palindrome_single
+  assert call is_palindrome 7
+
+#test palindrome_large
+  assert call is_palindrome 12321
+
+#entry
+  v0 :bool = call is_palindrome 121
+  v1 :bool = call is_palindrome -121
+  v2 :bool = call is_palindrome 12321
+  log "info" "is_palindrome(121) = {0}" v0
+  log "info" "is_palindrome(-121) = {0}" v1
+  log "info" "is_palindrome(12321) = {0}" v2
+  = 0

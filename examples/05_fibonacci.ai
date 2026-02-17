@@ -1,0 +1,39 @@
+-- LeetCode #509: Fibonacci Number
+-- Fold with list accumulator [a b] instead of tuple
+
+#fn fib_step :[i32] acc:[i32] unused:i32
+  v0 :i32 = call get acc 0
+  v1 :i32 = call get acc 1
+  v2 :i32 = + v0 v1
+  = [v1 v2]
+
+#fn fib :i32 n:i32
+  v0 :bool = <= n 0
+  v1 :bool = == n 1
+  v2 :[i32] = call range 0 n
+  v3 :[i32] = fold v2 [0 1] fib_step
+  v4 :i32 = call get v3 0
+  v5 :i32 = select v1 1 v4
+  v6 :i32 = select v0 0 v5
+  = v6
+
+#test fib_0
+  assert == (call fib 0) 0
+
+#test fib_1
+  assert == (call fib 1) 1
+
+#test fib_2
+  assert == (call fib 2) 1
+
+#test fib_5
+  assert == (call fib 5) 5
+
+#test fib_10
+  assert == (call fib 10) 55
+
+#entry
+  v0 :[i32] = call range 0 11
+  v1 :[i32] = map fib v0
+  log "info" "Fibonacci 0..10: {0}" v1
+  = 0

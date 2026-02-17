@@ -1,0 +1,40 @@
+-- LeetCode #7: Reverse Integer
+-- Reverse digits of a 32-bit signed integer. Return 0 if overflow.
+
+#fn reverse_int :i32 n:i32
+  v0 :bool = < n 0
+  v1 :i32 = call abs n
+  v2 :text = call to_text v1
+  v3 :[text] = call chars v2
+  v4 :[text] = call reverse v3
+  v5 :text = call join v4 ""
+  v6 :i32 = cast i32 v5
+  v7 :bool = > v6 2147483647
+  v8 :i32 = select v7 0 v6
+  v9 :i32 = select v0 neg v8 v8
+  = v9
+
+#test reverse_123
+  v0 :i32 = call reverse_int 123
+  assert == v0 321
+
+#test reverse_negative
+  v0 :i32 = call reverse_int -123
+  assert == v0 -321
+
+#test reverse_trailing_zero
+  v0 :i32 = call reverse_int 120
+  assert == v0 21
+
+#test reverse_zero
+  v0 :i32 = call reverse_int 0
+  assert == v0 0
+
+#entry
+  v0 :i32 = call reverse_int 123
+  v1 :i32 = call reverse_int -456
+  v2 :i32 = call reverse_int 120
+  log "info" "reverse(123) = {0}" v0
+  log "info" "reverse(-456) = {0}" v1
+  log "info" "reverse(120) = {0}" v2
+  = 0

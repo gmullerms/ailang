@@ -1,0 +1,44 @@
+-- LeetCode #1: Two Sum
+-- Given a list of integers and a target, return indices of two numbers that add up to target.
+
+#fn two_sum_search :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
+  v0 :bool = >= i size
+  v1 :i32 = select v0 -1 (call two_sum_check nums target i j size)
+  = v1
+
+#fn two_sum_check :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
+  v0 :bool = >= j size
+  v1 :i32 = (+ i 1)
+  v2 :i32 = (+ i 2)
+  v3 :i32 = select v0 (call two_sum_search nums target v1 v2 size) (call two_sum_try nums target i j size)
+  = v3
+
+#fn two_sum_try :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
+  v0 :i32 = call get nums i
+  v1 :i32 = call get nums j
+  v2 :i32 = + v0 v1
+  v3 :bool = == v2 target
+  v4 :i32 = (+ j 1)
+  v5 :i32 = select v3 i (call two_sum_check nums target i v4 size)
+  = v5
+
+#fn two_sum :i32 nums:[i32] target:i32
+  v0 :i32 = call len nums
+  v1 :i32 = call two_sum_search nums target 0 1 v0
+  = v1
+
+#test two_sum_basic
+  v0 :[i32] = [2 7 11 15]
+  v1 :i32 = call two_sum v0 9
+  assert == v1 0
+
+#test two_sum_middle
+  v0 :[i32] = [3 2 4]
+  v1 :i32 = call two_sum v0 6
+  assert == v1 1
+
+#entry
+  v0 :[i32] = [2 7 11 15]
+  v1 :i32 = call two_sum v0 9
+  log "info" "Two Sum [2 7 11 15] target=9 -> index {0}" v1
+  = 0

@@ -1,0 +1,54 @@
+-- LeetCode #21: Merge Two Sorted Lists
+-- Recursive: check empty, compare heads, take smaller
+
+#fn merge_sorted :[i32] a:[i32] b:[i32]
+  v0 :bool = call is_empty a
+  v1 :bool = select v0 true false
+  v2 :[i32] = select v1 b (call merge_a_nonempty a b)
+  = v2
+
+#fn merge_a_nonempty :[i32] a:[i32] b:[i32]
+  v0 :bool = call is_empty b
+  v1 :[i32] = select v0 a (call merge_both a b)
+  = v1
+
+#fn merge_both :[i32] a:[i32] b:[i32]
+  v0 :i32 = call head a
+  v1 :i32 = call head b
+  v2 :bool = <= v0 v1
+  v3 :[i32] = select v2 (call merge_take_a a b) (call merge_take_b a b)
+  = v3
+
+#fn merge_take_a :[i32] a:[i32] b:[i32]
+  v0 :i32 = call head a
+  v1 :[i32] = call tail a
+  v2 :[i32] = call merge_sorted v1 b
+  = call append [v0] v2
+
+#fn merge_take_b :[i32] a:[i32] b:[i32]
+  v0 :i32 = call head b
+  v1 :[i32] = call tail b
+  v2 :[i32] = call merge_sorted a v1
+  = call append [v0] v2
+
+#test merge_basic
+  v0 :[i32] = call merge_sorted [1 2 4] [1 3 4]
+  assert == (call len v0) 6
+  assert == (call get v0 0) 1
+  assert == (call get v0 1) 1
+  assert == (call get v0 2) 2
+
+#test merge_empty_left
+  v0 :[i32] = call merge_sorted [] [1 2 3]
+  assert == (call len v0) 3
+
+#test merge_empty_both
+  v0 :[i32] = call merge_sorted [] []
+  assert == (call len v0) 0
+
+#entry
+  v0 :[i32] = call merge_sorted [1 3 5 7] [2 4 6 8]
+  log "info" "merge [1 3 5 7] + [2 4 6 8] = {0}" v0
+  v1 :[i32] = call merge_sorted [1 2 4] [1 3 4]
+  log "info" "merge [1 2 4] + [1 3 4] = {0}" v1
+  = 0

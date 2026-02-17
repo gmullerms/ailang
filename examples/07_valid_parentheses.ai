@@ -1,0 +1,72 @@
+-- LeetCode #20: Valid Parentheses
+-- Fold with a list as stack
+
+#fn is_opener :bool c:text
+  v0 :bool = == c "("
+  v1 :bool = == c "["
+  v2 :bool = == c "{"
+  = or v0 (or v1 v2)
+
+#fn matches_pair :bool open:text close:text
+  v0 :bool = and (== open "(") (== close ")")
+  v1 :bool = and (== open "[") (== close "]")
+  v2 :bool = and (== open "{") (== close "}")
+  = or v0 (or v1 v2)
+
+#fn paren_step :[text] stack:[text] c:text
+  v0 :i32 = call len stack
+  v1 :bool = and (== v0 1) (== (call get stack 0) "INVALID")
+  v2 :[text] = select v1 stack (call paren_process stack c)
+  = v2
+
+#fn paren_process :[text] stack:[text] c:text
+  v0 :bool = call is_opener c
+  v1 :[text] = select v0 (call push stack c) (call paren_close stack c)
+  = v1
+
+#fn paren_close :[text] stack:[text] c:text
+  v0 :i32 = call len stack
+  v1 :bool = == v0 0
+  v2 :[text] = select v1 ["INVALID"] (call paren_check stack c)
+  = v2
+
+#fn paren_check :[text] stack:[text] c:text
+  v0 :i32 = call len stack
+  v1 :i32 = - v0 1
+  v2 :text = call get stack v1
+  v3 :bool = call matches_pair v2 c
+  v4 :[text] = call slice stack 0 v1
+  v5 :[text] = select v3 v4 ["INVALID"]
+  = v5
+
+#fn is_valid :bool s:text
+  v0 :[text] = call chars s
+  v1 :[text] = fold v0 [] paren_step
+  v2 :i32 = call len v1
+  = == v2 0
+
+#test valid_simple
+  assert call is_valid "()"
+
+#test valid_multi
+  assert call is_valid "()[]{}"
+
+#test valid_nested
+  assert call is_valid "{[]}"
+
+#test invalid_mismatch
+  v0 :bool = call is_valid "(]"
+  assert not v0
+
+#test invalid_unclosed
+  v0 :bool = call is_valid "((("
+  assert not v0
+
+#entry
+  v0 :bool = call is_valid "()[]{}"
+  v1 :bool = call is_valid "{[()]}"
+  v2 :bool = call is_valid "(]"
+  log "info" "is_valid('()[]{}') = {0}" v0
+  log "info" "is_valid('{[()]}') = {0}" v1
+  log "info" "is_valid('(]') = {0}" v2
+  = 0
