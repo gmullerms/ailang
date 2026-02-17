@@ -844,9 +844,7 @@ AILang has a maximum nesting depth of 1. Never put a `map` inside a `map`, a `se
 
 #fn search_from :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
   v0 :bool = >= j size
-  v1 :i32 = select v0
-    (call next_i nums target i size)
-    (call try_pair nums target i j size)
+  v1 :i32 = select v0 (call next_i nums target i size) (call try_pair nums target i j size)
   = v1
 
 #fn try_pair :i32 nums:[i32] target:i32 i:i32 j:i32 size:i32
@@ -861,7 +859,48 @@ AILang has a maximum nesting depth of 1. Never put a `map` inside a `map`, a `se
 
 **Rule:** When you catch yourself nesting, stop. Create a new `#fn`. Each function should be flat — a sequence of binds followed by a return. Recursion replaces loops; named functions replace nested lambdas.
 
-### 17.3 Statements vs Expressions
+### 17.3 CRITICAL: Every Statement Is One Line
+
+A statement is a single line. There are no multi-line statements, no line continuations, no expression wrapping across lines. When the parser hits a newline, the current statement ends.
+
+**WRONG — select split across lines (parse error):**
+```
+v0 :i32 = select v1
+  (call foo a b)
+  (call bar a b)
+```
+
+The parser reads `select v1`, then hits a newline and expects the statement to be complete — but `select` needs 3 arguments.
+
+**RIGHT — everything on one line:**
+```
+v0 :i32 = select v1 (call foo a b) (call bar a b)
+```
+
+**If a line gets too long**, break the logic into smaller steps with intermediate binds:
+```
+v0 :i32 = call foo a b
+v1 :i32 = call bar a b
+v2 :bool = > x 0
+v3 :i32 = select v2 v0 v1
+```
+
+This also applies to `fold`, `map`, and other expressions — all arguments must appear on the same line as the keyword.
+
+**WRONG:**
+```
+v0 :i32 = fold nums 0
+  (fn acc:i32 x:i32 => + acc x)
+```
+
+**RIGHT:**
+```
+v0 :i32 = fold nums 0 (fn acc:i32 x:i32 => + acc x)
+```
+
+**Rule:** One line, one statement. If it doesn't fit, decompose into binds or extract a `#fn`.
+
+### 17.4 Statements vs Expressions (Not Interchangeable)
 
 Only `#fn`, `#entry`, and `#test` blocks contain statements. Everywhere else (lambda bodies, `select` branches, `match` arms, function arguments) expects **expressions**.
 
@@ -894,7 +933,7 @@ v0 :i32 = select cond (v1 :i32 = + a b) (v2 :i32 = + a c)
 v0 :i32 = select cond (+ a b) (+ a c)
 ```
 
-### 17.4 Use Lists, Not Tuples, for Indexed Data
+### 17.5 Use Lists, Not Tuples, for Indexed Data
 
 The `get` builtin works on **lists**, not tuples. When you need indexed access to a compound accumulator, use a list.
 
@@ -921,7 +960,7 @@ v0 :[i32] = fold nums [0 0] (fn acc:[i32] x:i32 =>
   ])
 ```
 
-### 17.5 Grouped Expressions for Sub-Expression Arguments
+### 17.6 Grouped Expressions for Sub-Expression Arguments
 
 When passing a compound expression (operator, call, select) as an argument, wrap it in `()`. Without grouping, the parser consumes atoms greedily and misinterprets boundaries.
 
@@ -944,7 +983,7 @@ v2 :[i32] = call range 0 (call len nums) -- nested call as arg
 
 **Rule:** If an argument to `call`, `select`, `map`, etc. is anything other than a literal or variable, wrap it in `()`.
 
-### 17.6 Recursion Replaces Loops
+### 17.7 Recursion Replaces Loops
 
 AILang has no `for`, `while`, or loop constructs. Use either functional iteration (`map`/`filter`/`fold`) or recursion with `select` for termination.
 
@@ -984,7 +1023,7 @@ v0 :i32 = select cond1 (select cond2 (call recurse_a x) (call recurse_b x)) (cal
   = select cond2 (call recurse_a x) (call recurse_b x)
 ```
 
-### 17.7 SSA Naming Convention
+### 17.8 SSA Naming Convention
 
 Variable names inside blocks are always `v0`, `v1`, `v2`, ... in strictly incrementing order. Never skip numbers. Never reuse numbers. Never use descriptive names for intermediates.
 
@@ -1014,7 +1053,7 @@ Variable names inside blocks are always `v0`, `v1`, `v2`, ... in strictly increm
 
 Parameters use short names: `a`, `b`, `x`, `n`, `lst`, `acc`, `idx`, `nums`, `target`, `size`.
 
-### 17.8 Function Order: Dependencies First, Entry Last
+### 17.9 Function Order: Dependencies First, Entry Last
 
 Functions must be defined before they are called. Helper functions come first, higher-level functions come next, tests come after functions, and `#entry` is always last.
 
@@ -1039,7 +1078,7 @@ Functions must be defined before they are called. Helper functions come first, h
   = 0
 ```
 
-### 17.9 Quick Reference: "If I Want X, I Write Y"
+### 17.10 Quick Reference: "If I Want X, I Write Y"
 
 | I want...                          | I write...                                                |
 |------------------------------------|-----------------------------------------------------------|
@@ -1054,3 +1093,5 @@ Functions must be defined before they are called. Helper functions come first, h
 | Mutable accumulator                | `fold` with list accumulator `[val1 val2]`                |
 | String building in a loop          | `fold` with text accumulator + `concat`                   |
 | Nested conditionals                | Chain of `select` or separate `#fn` per branch            |
+| A long expression                  | Break into intermediate `vN` binds, one per line          |
+| Multi-line statement               | **Not possible.** One line = one statement. Always.       |
