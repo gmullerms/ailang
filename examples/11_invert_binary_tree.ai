@@ -1,0 +1,72 @@
+-- LeetCode #226: Invert Binary Tree
+-- Tree node = [value left right], empty = null
+
+#fn node :any val:i32 left:any right:any
+  = [val left right]
+
+#fn leaf :any val:i32
+  = [val null null]
+
+#fn val :i32 tree:any
+  = call get tree 0
+
+#fn left :any tree:any
+  = call get tree 1
+
+#fn right :any tree:any
+  = call get tree 2
+
+#fn invert :any tree:any
+  v0 :bool = == tree null
+  = select v0 null (call _invert_node tree)
+
+#fn _invert_node :any tree:any
+  v0 :i32 = call val tree
+  v1 :any = call invert (call right tree)
+  v2 :any = call invert (call left tree)
+  = [v0 v1 v2]
+
+#fn tree_text :text tree:any
+  v0 :bool = == tree null
+  = select v0 "." (call _node_text tree)
+
+#fn _node_text :text tree:any
+  v0 :text = call to_text (call val tree)
+  v1 :text = call tree_text (call left tree)
+  v2 :text = call tree_text (call right tree)
+  = call fmt "({0} {1} {2})" v0 v1 v2
+
+#test invert_basic
+  v0 :any = call node 4 (call node 2 (call leaf 1) (call leaf 3)) (call node 7 (call leaf 6) (call leaf 9))
+  v1 :any = call invert v0
+  assert == (call val v1) 4
+  assert == (call val (call left v1)) 7
+  assert == (call val (call right v1)) 2
+  assert == (call val (call left (call left v1))) 9
+  assert == (call val (call left (call right v1))) 3
+  assert == (call val (call right (call left v1))) 6
+  assert == (call val (call right (call right v1))) 1
+
+#test invert_null
+  v0 :any = call invert null
+  assert == v0 null
+
+#test invert_single
+  v0 :any = call invert (call leaf 42)
+  assert == (call val v0) 42
+  assert == (call left v0) null
+  assert == (call right v0) null
+
+#test invert_left_only
+  v0 :any = call node 1 (call leaf 2) null
+  v1 :any = call invert v0
+  assert == (call val v1) 1
+  assert == (call left v1) null
+  assert == (call val (call right v1)) 2
+
+#entry
+  v0 :any = call node 4 (call node 2 (call leaf 1) (call leaf 3)) (call node 7 (call leaf 6) (call leaf 9))
+  log "info" "original:  {0}" (call tree_text v0)
+  v1 :any = call invert v0
+  log "info" "inverted:  {0}" (call tree_text v1)
+  = 0
