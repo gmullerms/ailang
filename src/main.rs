@@ -18,7 +18,7 @@ fn main() {
     }
 }
 
-const VERSION: &str = "0.1.0";
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const BANNER: &str = r#"
      _    ___ _
