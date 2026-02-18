@@ -97,7 +97,7 @@ ailang/
     lexer.rs        -- Tokenizer (source text -> token stream)
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
-    interpreter.rs  -- Tree-walking interpreter with 44+ built-in functions
+    interpreter.rs  -- Tree-walking interpreter with 47+ built-in functions, TCO
     main.rs         -- CLI entry point
   tests/
     integration.rs  -- Integration tests for all example programs
@@ -116,6 +116,9 @@ ailang/
     11_invert_binary_tree.ai -- nested lists as tree, recursive invert
     12_builtins_demo.ai     -- Showcase of find, replace, set, pop, typeof, is
     13_cond_demo.ai         -- cond expression: classify, grade, fizzbuzz
+    14_file_io_demo.ai      -- read_file, write_file, env_get
+    15_pipeline_demo.ai     -- Pipeline operator |> chaining
+    16_error_handling_demo.ai -- error, ?, #err handlers
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
@@ -169,6 +172,17 @@ Multi-branch conditionals use `cond` (flat alternative to nested `select`):
 v0 :text = cond (== x 0) "zero" (> x 0) "pos" "neg"
 ```
 
+Pipeline operator chains function calls:
+```
+v0 :text = "  hello world  " |> trim |> upper
+v1 :i32 = 5 |> double |> add 3
+```
+
+Error handling with `error`, `?` propagation, and `#err` handlers:
+```
+v0 :f64 = (call safe_divide x y)?
+```
+
 Iteration is functional — no loops:
 ```
 v0 :[i32] = map (fn x:i32 => * x x) nums
@@ -202,6 +216,9 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 ### List
 `len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
 
+### Error
+`error`
+
 ### Type
 `typeof`, `is`
 
@@ -209,17 +226,17 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
 
 ### I/O
-`print`, `print_no_nl`, `read_line`, `log`
+`print`, `print_no_nl`, `read_line`, `log`, `read_file`, `write_file`, `env_get`
 
 ## Testing
 
-AILang has 114 tests: 101 unit tests (lexer, parser, interpreter) and 13 integration tests.
+AILang has 152 tests: 139 unit tests (lexer, parser, interpreter) and 13 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 

@@ -288,6 +288,13 @@ impl Parser {
     // --- Expression parsing ---
 
     pub fn parse_expr(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.parse_expr_inner()?;
+        self.parse_pipeline(expr)
+    }
+
+    /// Parse the core expression (without pipeline). Pipeline wrapping is done
+    /// by `parse_expr` after this returns.
+    fn parse_expr_inner(&mut self) -> Result<Expr, ParseError> {
         match &self.peek().kind {
             // Prefix binary operators
             TokenKind::Plus => self.parse_binop(BinOpKind::Add),
@@ -398,9 +405,60 @@ impl Parser {
                 })
             }
 
+            // Error constructor
+            TokenKind::Error => {
+                self.advance();
+                let msg = self.parse_atom()?;
+                Ok(Expr::Call {
+                    name: "error".to_string(),
+                    args: vec![msg],
+                })
+            }
+
             // Literals and atoms
             _ => self.parse_atom(),
         }
+    }
+
+    /// Desugar pipeline: `expr |> f |> g x` becomes `call g (call f expr) x`
+    /// Each pipeline stage is: `|> functionName [extra args...]`
+    /// The result of the previous stage is inserted as the FIRST argument.
+    fn parse_pipeline(&mut self, mut expr: Expr) -> Result<Expr, ParseError> {
+        while self.check(&TokenKind::Pipe) {
+            self.advance(); // consume |>
+
+            // Parse the function name
+            let name = match &self.peek().kind {
+                TokenKind::Ident(name) => {
+                    let name = name.clone();
+                    self.advance();
+                    name
+                }
+                TokenKind::Typeof => {
+                    self.advance();
+                    "typeof".to_string()
+                }
+                TokenKind::Is => {
+                    self.advance();
+                    "is".to_string()
+                }
+                _ => {
+                    return Err(self.error(&format!(
+                        "expected function name after |>, got {:?}",
+                        self.peek().kind
+                    )));
+                }
+            };
+
+            // Build args: previous result is first arg, then any extra atoms
+            let mut args = vec![expr];
+            while !self.check_pipeline_stage_end() {
+                args.push(self.parse_atom()?);
+            }
+
+            expr = Expr::Call { name, args };
+        }
+        Ok(expr)
     }
 
     fn parse_binop(&mut self, op: BinOpKind) -> Result<Expr, ParseError> {
@@ -439,6 +497,10 @@ impl Parser {
             TokenKind::Is => {
                 self.advance();
                 "is".to_string()
+            }
+            TokenKind::Error => {
+                self.advance();
+                "error".to_string()
             }
             _ => return Err(self.error(&format!("expected identifier, got {:?}", self.peek().kind))),
         };
@@ -601,7 +663,19 @@ impl Parser {
     }
 
     /// Parse an atomic expression (literals, variables, bracketed constructs)
+    /// Also handles postfix `?` for error propagation.
     fn parse_atom(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.parse_atom_inner()?;
+        // Check for postfix `?` (error propagation)
+        if self.check(&TokenKind::Question) {
+            self.advance();
+            Ok(Expr::Propagate(Box::new(expr)))
+        } else {
+            Ok(expr)
+        }
+    }
+
+    fn parse_atom_inner(&mut self) -> Result<Expr, ParseError> {
         match &self.peek().kind {
             TokenKind::IntLit(n) => {
                 let n = *n;
@@ -816,7 +890,7 @@ impl Parser {
     }
 
     fn check_expr_end(&self) -> bool {
-        // Stop consuming args at line end OR closing delimiters
+        // Stop consuming args at line end OR closing delimiters OR pipeline
         matches!(
             self.peek().kind,
             TokenKind::Newline
@@ -825,6 +899,21 @@ impl Parser {
                 | TokenKind::RParen
                 | TokenKind::RBrack
                 | TokenKind::RBrace
+                | TokenKind::Pipe
+        )
+    }
+
+    fn check_pipeline_stage_end(&self) -> bool {
+        // Stop consuming pipeline stage args at line end, closing delimiters, or next pipe
+        matches!(
+            self.peek().kind,
+            TokenKind::Newline
+                | TokenKind::Eof
+                | TokenKind::Indent
+                | TokenKind::RParen
+                | TokenKind::RBrack
+                | TokenKind::RBrace
+                | TokenKind::Pipe
         )
     }
 
@@ -875,6 +964,7 @@ impl Parser {
                 | TokenKind::Shr
                 | TokenKind::Async
                 | TokenKind::Await
+                | TokenKind::Error
         )
     }
 
@@ -1309,5 +1399,81 @@ mod tests {
         let src = "#fn f :text x:bool\n  = cond x \"yes\"";
         let err = parse_source_err(src);
         assert!(err.message.contains("cond requires"));
+    }
+
+    // -------------------------------------------------------
+    // Pipeline operator |>
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_pipeline_simple() {
+        // x |> f  parses as  call f x
+        let src = "#fn f :i32 x:i32\n  = x |> double";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Call { name, args } = value {
+                assert_eq!(name, "double");
+                assert_eq!(args.len(), 1);
+                assert!(matches!(&args[0], Expr::Var(s) if s == "x"));
+            } else {
+                panic!("expected Call, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    #[test]
+    fn test_parse_pipeline_chain() {
+        // x |> f |> g  parses as  call g (call f x)
+        let src = "#fn f :i32 x:i32\n  = x |> double |> triple";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Call { name, args } = value {
+                assert_eq!(name, "triple");
+                assert_eq!(args.len(), 1);
+                // The single arg should itself be a Call to double
+                if let Expr::Call { name: inner_name, args: inner_args } = &args[0] {
+                    assert_eq!(inner_name, "double");
+                    assert_eq!(inner_args.len(), 1);
+                    assert!(matches!(&inner_args[0], Expr::Var(s) if s == "x"));
+                } else {
+                    panic!("expected nested Call, got {:?}", args[0]);
+                }
+            } else {
+                panic!("expected Call, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    #[test]
+    fn test_parse_pipeline_with_args() {
+        // x |> f a b |> g  parses as  call g (call f x a b)
+        let src = "#entry\n  v0 :i32 = 5 |> add 3 4 |> double";
+        let prog = parse_source(src);
+        let entry = prog.entry.as_ref().unwrap();
+        if let Stmt::Bind { value, .. } = &entry.body[0] {
+            if let Expr::Call { name, args } = value {
+                assert_eq!(name, "double");
+                assert_eq!(args.len(), 1);
+                // Inner call: add with args [5, 3, 4]
+                if let Expr::Call { name: inner_name, args: inner_args } = &args[0] {
+                    assert_eq!(inner_name, "add");
+                    assert_eq!(inner_args.len(), 3);
+                    assert!(matches!(&inner_args[0], Expr::IntLit(5)));
+                    assert!(matches!(&inner_args[1], Expr::IntLit(3)));
+                    assert!(matches!(&inner_args[2], Expr::IntLit(4)));
+                } else {
+                    panic!("expected nested Call, got {:?}", args[0]);
+                }
+            } else {
+                panic!("expected Call, got {:?}", value);
+            }
+        } else {
+            panic!("expected bind statement");
+        }
     }
 }

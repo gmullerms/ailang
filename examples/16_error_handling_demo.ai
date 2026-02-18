@@ -1,0 +1,72 @@
+-- AILang Error Handling Demo
+-- Demonstrates: error builtin, ? propagation, #err handlers
+
+-- A function that can fail: safe division
+#fn safe_divide :f64 a:f64 b:f64
+  = select (== b 0.0) (error "division by zero") (/ a b)
+
+-- A function that uses ? to propagate errors upward
+#fn compute :f64 x:f64
+  v0 :f64 = (call safe_divide x 0.0)?
+  = + v0 1.0
+
+-- A function that always fails
+#fn always_fails :text
+  = error "something went wrong"
+
+-- #err handler: when always_fails errors, recover with a default
+#err always_fails
+  fallback "default_value"
+
+-- #err handler: when compute errors, recover with -1
+#err compute
+  fallback -1.0
+
+#test safe_divide_success
+  v0 :f64 = call safe_divide 10.0 2.0
+  assert == v0 5.0
+
+#test safe_divide_by_zero_returns_error
+  v0 :any = call safe_divide 10.0 0.0
+  assert call is "err" v0
+
+#test propagation_with_handler
+  v0 :f64 = call compute 5.0
+  assert == v0 -1.0
+
+#test err_handler_provides_fallback
+  v0 :text = call always_fails
+  assert == v0 "default_value"
+
+#test normal_value_passes_through_question_mark
+  v0 :f64 = (call safe_divide 10.0 5.0)?
+  assert == v0 2.0
+
+#test error_is_check
+  v0 :any = error "test"
+  assert call is "err" v0
+
+#test non_error_is_check
+  v0 :i32 = 42
+  assert not (call is "err" v0)
+
+#entry
+  > "--- Error Handling Demo ---"
+  > "1. safe_divide 10.0 2.0:"
+  v0 :f64 = call safe_divide 10.0 2.0
+  > v0
+  > "2. safe_divide 10.0 0.0 (returns error):"
+  v1 :any = call safe_divide 10.0 0.0
+  > v1
+  > "3. compute 5.0 (propagates error, handler returns -1.0):"
+  v2 :f64 = call compute 5.0
+  > v2
+  > "4. always_fails (handler provides default):"
+  v3 :text = call always_fails
+  > v3
+  > "5. Checking if a value is an error:"
+  v4 :any = error "oops"
+  v5 :bool = call is "err" v4
+  > v5
+  > "--- Done ---"
+  = 0

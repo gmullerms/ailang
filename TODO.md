@@ -49,15 +49,15 @@
 ## Medium Term — Language Completeness (v0.2)
 
 ### Tail-Call Optimization
-- [ ] Detect tail-position calls (last expression in function body is `call` or `select` branches are calls)
-- [ ] Reuse stack frame for tail calls instead of growing the call stack
-- [ ] Add tests: deep recursion (10k+ depth) that would stack overflow without TCO
+- [x] Detect tail-position calls (last expression in function body is `call` or `select`/`cond` branches are calls)
+- [x] Reuse stack frame for tail calls via trampoline pattern
+- [x] Add tests: deep recursion (10k+ depth), mutual recursion, accumulator pattern (11 tests)
 - [ ] Document TCO guarantee in SPEC.md
 
 ### Pipeline Operator
-- [ ] Implement `|>` pipeline sugar: `val |> fn1 |> fn2` desugars to `call fn2 (call fn1 val)`
-- [ ] Update parser to handle `|>` as infix operator
-- [ ] Add pipeline examples to demonstrate chaining
+- [x] Implement `|>` pipeline sugar: `val |> fn1 |> fn2` desugars to `call fn2 (call fn1 val)`
+- [x] Parser desugaring (no new AST nodes, no interpreter changes needed)
+- [x] Add pipeline examples (`15_pipeline_demo.ai`) and 9 tests (3 parser + 6 interpreter)
 
 ### Iteration Extensions
 - [ ] `zip` — combine two lists into list of tuples
@@ -70,9 +70,10 @@
 - [ ] Standard library: `std/math.ai`, `std/text.ai`, `std/list.ai`
 
 ### Error Handling
-- [ ] Wire up `#err` handler blocks (parsed but not executed)
-- [ ] Implement `?` propagation operator (AST exists as `Expr::Propagate`)
-- [ ] Retry logic in `#err` blocks
+- [x] Wire up `#err` handler blocks with fallback and retry logic
+- [x] Implement `?` propagation operator (postfix, unwraps or propagates errors)
+- [x] Add `Value::Err(String)` variant and `error` builtin for first-class errors
+- [x] Add 13 error handling tests + example (`16_error_handling_demo.ai`)
 
 ### JSON Operations
 - [ ] `jget` — navigate JSON-like nested maps/lists by path
@@ -93,9 +94,10 @@
 - [ ] Platform-aware library resolution (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS)
 
 ### I/O & Files
-- [ ] `read_file` / `write_file` builtins for file I/O
+- [x] `read_file` / `write_file` builtins for file I/O
 - [ ] `http_get` / `http_post` for basic HTTP (useful for agent tasks)
-- [ ] `env_get` — read environment variables
+- [x] `env_get` — read environment variables
+- [x] Add 4 I/O tests + example (`14_file_io_demo.ai`)
 
 ### Sandboxed Execution Mode
 - [ ] `--sandbox` flag that restricts I/O (no file, network, or FFI access)
