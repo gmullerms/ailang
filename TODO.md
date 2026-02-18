@@ -3,30 +3,30 @@
 ## Short Term — Polish & Robustness (v0.1.x)
 
 ### Testing
-- [ ] Add Rust unit tests for parser (only lexer has `#[test]` coverage today)
-- [ ] Add Rust unit tests for interpreter (builtins, select laziness, recursion)
-- [ ] Add integration tests that run each `examples/*.ai` and assert output
-- [ ] Add negative tests (parse errors, runtime errors, type mismatches)
+- [x] Add Rust unit tests for parser (18 tests: functions, select, literals, lambda, errors, iterators, cast)
+- [x] Add Rust unit tests for interpreter (42 tests: arithmetic, comparison, select laziness, builtins, maps, fold/map/filter, cast, null, logic)
+- [x] Add integration tests that run each `examples/*.ai` and assert output (13 tests)
+- [x] Add negative tests (parse errors, runtime errors, type mismatches)
 
 ### Missing Builtins (spec'd, easy to add)
-- [ ] `find` — find index of substring in text
-- [ ] `replace` — replace first occurrence in text
-- [ ] `set` — return new list with element at index replaced
-- [ ] `pop` — return `(new_list, last_element)` tuple
-- [ ] `typeof` — return type as text
-- [ ] `is` — type check, returns bool
+- [x] `find` — find index of substring in text
+- [x] `replace` — replace first occurrence in text
+- [x] `set` — return new list with element at index replaced
+- [x] `pop` — return `(new_list, last_element)` tuple
+- [x] `typeof` — return type as text
+- [x] `is` — type check, returns bool
 
 ### Bug Fixes & Hardening
-- [ ] Handle `read_line` EOF gracefully (return empty or error instead of looping)
-- [ ] Replace `unwrap()` in `main.rs` thread spawn with `.expect()` or proper error
-- [ ] Improve error messages with line numbers (currently only parse errors show lines)
+- [x] Handle `read_line` EOF gracefully (returns error "end of input" on EOF)
+- [x] Replace `unwrap()` in `main.rs` thread spawn with `.expect()`
+- [x] Improve error messages with function context (`in 'funcname': ...` wrapping)
 - [ ] Fix `Expr::Builtin` AST variant — parsed but never constructed; remove or wire up
 
 ### Project Quality
-- [ ] Expand `.gitignore` (add `.vscode/`, `.idea/`, `*.log`, `.DS_Store`, `.env`)
+- [x] Expand `.gitignore` (added `.vscode/`, `.idea/`, `*.log`, `.DS_Store`, `.env`, editor swap files)
 - [ ] Add CI with GitHub Actions (`cargo build`, `cargo test`, run example tests)
 - [ ] Add `Cargo.toml` metadata (description, license, repository, authors)
-- [ ] Add more examples: string processing, recursive data structures, graph traversal
+- [x] Add more examples: builtins demo (`12_builtins_demo.ai`), Connect 4 game, binary tree invert
 
 ---
 
@@ -83,7 +83,7 @@
 
 ### Developer Experience
 - [ ] REPL mode: `ailang` with no args launches interactive prompt
-- [ ] Better runtime errors: show call stack / function name chain
+- [x] Better runtime errors: show call stack / function name chain (added `in 'funcname':` wrapping)
 - [ ] `--verbose` flag to trace execution (print each statement as it runs)
 - [ ] Syntax highlighting files (VS Code `.tmLanguage`, tree-sitter grammar)
 
