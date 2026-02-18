@@ -975,7 +975,7 @@ mod tests {
             assert!(matches!(value, Expr::Select { .. }));
             if let Expr::Select { cond, then_val, else_val } = value {
                 assert!(matches!(cond.as_ref(), Expr::BinOp { op: BinOpKind::Gt, .. }));
-                assert!(matches!(then_val.as_ref(), Expr::Var(ref name) if name == "x"));
+                assert!(matches!(then_val.as_ref(), Expr::Var(name) if name == "x"));
                 assert!(matches!(else_val.as_ref(), Expr::UnaryOp { op: UnaryOpKind::Neg, .. }));
             }
         } else {
@@ -1018,7 +1018,7 @@ mod tests {
         if let Stmt::Return { value } = &f.body[0] {
             if let Expr::MapLit(pairs) = value {
                 assert_eq!(pairs.len(), 1);
-                assert!(matches!(&pairs[0].0, Expr::TextLit(ref s) if s == "key"));
+                assert!(matches!(&pairs[0].0, Expr::TextLit(s) if s == "key"));
                 assert!(matches!(pairs[0].1, Expr::IntLit(42)));
             } else {
                 panic!("expected MapLit, got {:?}", value);

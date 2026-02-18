@@ -692,7 +692,9 @@ impl Interpreter {
             }
         }
 
-        self.exec_body(&body, &mut fn_env)
+        self.exec_body(&body, &mut fn_env).map_err(|e| RuntimeError {
+            message: format!("in '{}': {}", name, e.message),
+        })
     }
 
     fn apply_fn(&self, func: &Value, args: &[Value], env: &Env) -> Result<Value, RuntimeError> {
@@ -868,9 +870,14 @@ impl Interpreter {
                 use std::io::{self, Write};
                 io::stdout().flush().ok();
                 let mut input = String::new();
-                io::stdin().read_line(&mut input).map_err(|e| RuntimeError {
+                let bytes_read = io::stdin().read_line(&mut input).map_err(|e| RuntimeError {
                     message: format!("read_line failed: {}", e),
                 })?;
+                if bytes_read == 0 {
+                    return Err(RuntimeError {
+                        message: "read_line: end of input".to_string(),
+                    });
+                }
                 Some(Value::Text(input.trim_end_matches('\n').trim_end_matches('\r').to_string()))
             }
             "abs" => match &args[0] {
@@ -1577,14 +1584,15 @@ mod tests {
         // but we verify it doesn't produce "unknown built-in" by checking
         // that it exists in the try_builtin match arms.
         let interp = Interpreter::new();
-        // Calling with no actual stdin will still not produce "unknown built-in".
-        // It would try to read from stdin and fail or succeed.
-        // We verify by checking the try_builtin return is Some (not None).
+        // In test context, stdin is closed so read_line hits EOF.
+        // The important thing is that the error says "end of input",
+        // NOT "unknown built-in" (which would mean it's not recognized).
         let result = interp.try_builtin("read_line", &[]);
-        assert!(result.is_ok(), "read_line should be a recognized builtin");
-        // It should return Some(...) not None
-        let inner = result.unwrap();
-        assert!(inner.is_some(), "read_line should not return None (unknown)");
+        match result {
+            Ok(Some(_)) => {} // read_line succeeded (unlikely in test)
+            Err(e) => assert!(e.message.contains("end of input"), "expected EOF error, got: {}", e.message),
+            Ok(None) => panic!("read_line should be a recognized builtin, got None"),
+        }
     }
 
     // -------------------------------------------------------

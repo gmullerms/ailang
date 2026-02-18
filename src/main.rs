@@ -11,7 +11,7 @@ use std::process;
 fn main() {
     // Spawn with larger stack to support deep recursion in interpreted programs
     let builder = std::thread::Builder::new().stack_size(8 * 1024 * 1024);
-    let handler = builder.spawn(run).unwrap();
+    let handler = builder.spawn(run).expect("failed to spawn interpreter thread");
     if let Err(e) = handler.join() {
         eprintln!("ailang panicked: {:?}", e);
         process::exit(1);
