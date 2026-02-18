@@ -39,7 +39,7 @@ Then open **Visual Studio Installer** and add the **Desktop development with C++
 ## Build
 
 ```
-git clone <repo-url>
+git clone https://github.com/gmullerms/ailang.git
 cd ailang
 cargo build
 ```
@@ -97,8 +97,10 @@ ailang/
     lexer.rs        -- Tokenizer (source text -> token stream)
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
-    interpreter.rs  -- Tree-walking interpreter with built-in functions
+    interpreter.rs  -- Tree-walking interpreter with 43+ built-in functions
     main.rs         -- CLI entry point
+  tests/
+    integration.rs  -- Integration tests for all example programs
   examples/
     hello.ai            -- Introduction: add, square, abs, map, fold
     01_two_sum.ai       -- LeetCode #1: recursive pair search
@@ -112,6 +114,7 @@ ailang/
     09_climbing_stairs.ai    -- fold with [prev curr] accumulator
     10_contains_duplicate.ai -- sort then recursive adjacent check
     11_invert_binary_tree.ai -- nested lists as tree, recursive invert
+    12_builtins_demo.ai     -- Showcase of find, replace, set, pop, typeof, is
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
@@ -188,16 +191,29 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `abs`, `min`, `max`, `sqrt`
 
 ### Text
-`concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`
+`concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`
 
 ### List
-`len`, `get`, `push`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+`len`, `get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+
+### Type
+`typeof`, `is`
 
 ### Map
 `mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
 
 ### I/O
 `print`, `print_no_nl`, `read_line`, `log`
+
+## Testing
+
+AILang has 97 tests: 84 unit tests (lexer, parser, interpreter) and 13 integration tests.
+
+```
+cargo test
+```
+
+Unit tests cover arithmetic, comparison, select laziness, builtins, map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
 
 ## Docs
 
