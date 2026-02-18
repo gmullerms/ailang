@@ -1,4 +1,5 @@
 /target
+.claude/
 .vscode/
 .idea/
 *.log
