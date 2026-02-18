@@ -162,7 +162,7 @@ impl Interpreter {
         }
     }
 
-    pub fn run(&mut self, program: Program) -> Result<Value, RuntimeError> {
+    pub fn run(&mut self, program: Program, test_only: bool) -> Result<Value, RuntimeError> {
         // Register all declarations
         for c in &program.consts {
             let val = self.eval_expr(&c.value, &Env::new())?;
@@ -180,6 +180,10 @@ impl Interpreter {
         // Run tests if any
         for test in &program.tests {
             self.run_test(test)?;
+        }
+
+        if test_only {
+            return Ok(Value::Void);
         }
 
         // Run entry point
@@ -848,7 +852,26 @@ impl Interpreter {
                     print!("{}", arg);
                 }
                 println!();
+                use std::io::Write;
+                std::io::stdout().flush().ok();
                 Some(Value::Void)
+            }
+            "print_no_nl" => {
+                for arg in args {
+                    print!("{}", arg);
+                }
+                use std::io::Write;
+                std::io::stdout().flush().ok();
+                Some(Value::Void)
+            }
+            "read_line" => {
+                use std::io::{self, Write};
+                io::stdout().flush().ok();
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).map_err(|e| RuntimeError {
+                    message: format!("read_line failed: {}", e),
+                })?;
+                Some(Value::Text(input.trim_end_matches('\n').trim_end_matches('\r').to_string()))
             }
             "abs" => match &args[0] {
                 Value::Int(n) => Some(Value::Int(n.abs())),
@@ -1068,11 +1091,7 @@ impl Interpreter {
             (Value::Bool(b), AiType::Text) => Ok(Value::Text(b.to_string())),
             (Value::Bool(b), AiType::I32) => Ok(Value::Int(if *b { 1 } else { 0 })),
             (Value::Text(s), AiType::I32) | (Value::Text(s), AiType::I64) => {
-                s.parse::<i64>()
-                    .map(Value::Int)
-                    .map_err(|_| RuntimeError {
-                        message: format!("cannot cast '{}' to integer", s),
-                    })
+                Ok(s.parse::<i64>().map(Value::Int).unwrap_or(Value::Int(0)))
             }
             (Value::Text(s), AiType::F64) => {
                 s.parse::<f64>()

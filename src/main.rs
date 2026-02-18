@@ -72,7 +72,7 @@ fn run() {
 
     // Interpret
     let mut interp = interpreter::Interpreter::new();
-    match interp.run(program) {
+    match interp.run(program, run_tests_only) {
         Ok(val) => {
             if !matches!(val, interpreter::Value::Void) {
                 println!("{}", val);

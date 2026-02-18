@@ -1,0 +1,362 @@
+-- Connect 4: Player vs Player and Player vs Computer
+-- Board: flat [i32] of 42 (7 cols x 6 rows), 0=empty 1=X 2=O
+-- Index = row * 7 + col. Row 0 = top, row 5 = bottom.
+
+-- ============================================================
+-- Board utilities
+-- ============================================================
+
+#fn make_board :[i32]
+  v0 :[i32] = call range 0 42
+  v1 :[i32] = map (fn x:i32 => * 0 x) v0
+  = v1
+
+#fn cell_char :text val:i32
+  v0 :bool = == val 1
+  v1 :bool = == val 2
+  v2 :text = select v0 "X" (select v1 "O" ".")
+  = v2
+
+#fn row_text :text board:[i32] row:i32
+  v0 :i32 = * row 7
+  v1 :text = call cell_char (call get board (+ v0 0))
+  v2 :text = call cell_char (call get board (+ v0 1))
+  v3 :text = call cell_char (call get board (+ v0 2))
+  v4 :text = call cell_char (call get board (+ v0 3))
+  v5 :text = call cell_char (call get board (+ v0 4))
+  v6 :text = call cell_char (call get board (+ v0 5))
+  v7 :text = call cell_char (call get board (+ v0 6))
+  v8 :text = call fmt "| {0} {1} {2} {3} {4} {5} {6} |" v1 v2 v3 v4 v5 v6 v7
+  = v8
+
+#fn print_board :void board:[i32]
+  call print "+---------------+"
+  call print (call row_text board 0)
+  call print (call row_text board 1)
+  call print (call row_text board 2)
+  call print (call row_text board 3)
+  call print (call row_text board 4)
+  call print (call row_text board 5)
+  call print "+---------------+"
+  call print "  1 2 3 4 5 6 7"
+  = 0
+
+-- ============================================================
+-- Board operations
+-- ============================================================
+
+-- Find the lowest empty row in a column (-1 if full)
+#fn find_row :i32 board:[i32] col:i32 row:i32
+  v0 :bool = < row 0
+  v1 :i32 = + (* row 7) col
+  v2 :i32 = select v0 0 (call get board v1)
+  v3 :bool = == v2 0
+  v4 :bool = and (not v0) v3
+  = select v4 row (select v0 -1 (call find_row board col (- row 1)))
+
+#fn drop_piece :i32 board:[i32] col:i32
+  = call find_row board col 5
+
+-- Set board[index] = val, return new board using map
+#fn set_cell :[i32] board:[i32] idx:i32 val:i32
+  v0 :[i32] = call range 0 42
+  = map (fn i:i32 => select (== i idx) val (call get board i)) v0
+
+-- Place piece: returns new board or same board if invalid
+#fn place_piece :[i32] board:[i32] col:i32 player:i32
+  v0 :i32 = call drop_piece board col
+  v1 :bool = == v0 -1
+  v2 :i32 = + (* v0 7) col
+  = select v1 board (call set_cell board v2 player)
+
+-- ============================================================
+-- Win detection
+-- ============================================================
+
+-- Check 4 consecutive cells for same player
+#fn check_four :bool board:[i32] i0:i32 i1:i32 i2:i32 i3:i32
+  v0 :i32 = call get board i0
+  v1 :i32 = call get board i1
+  v2 :i32 = call get board i2
+  v3 :i32 = call get board i3
+  v4 :bool = and (!= v0 0) (== v0 v1)
+  v5 :bool = and (== v0 v2) (== v0 v3)
+  = and v4 v5
+
+-- Horizontal win: check each row, each starting col 0..3
+#fn check_h_cell :bool board:[i32] row:i32 col:i32
+  v0 :i32 = + (* row 7) col
+  = call check_four board v0 (+ v0 1) (+ v0 2) (+ v0 3)
+
+#fn check_h_row :bool board:[i32] row:i32 col:i32
+  v0 :bool = > col 3
+  v1 :bool = call check_h_cell board row col
+  = select v0 false (select v1 true (call check_h_row board row (+ col 1)))
+
+#fn check_h :bool board:[i32] row:i32
+  v0 :bool = > row 5
+  v1 :bool = call check_h_row board row 0
+  = select v0 false (select v1 true (call check_h board (+ row 1)))
+
+-- Vertical win: check each col, each starting row 0..2
+#fn check_v_cell :bool board:[i32] row:i32 col:i32
+  v0 :i32 = + (* row 7) col
+  = call check_four board v0 (+ v0 7) (+ v0 14) (+ v0 21)
+
+#fn check_v_col :bool board:[i32] row:i32 col:i32
+  v0 :bool = > row 2
+  v1 :bool = call check_v_cell board row col
+  = select v0 false (select v1 true (call check_v_col board (+ row 1) col))
+
+#fn check_v :bool board:[i32] col:i32
+  v0 :bool = > col 6
+  v1 :bool = call check_v_col board 0 col
+  = select v0 false (select v1 true (call check_v board (+ col 1)))
+
+-- Diagonal (down-right) win
+#fn check_dr_cell :bool board:[i32] row:i32 col:i32
+  v0 :i32 = + (* row 7) col
+  = call check_four board v0 (+ v0 8) (+ v0 16) (+ v0 24)
+
+#fn check_dr_row :bool board:[i32] row:i32 col:i32
+  v0 :bool = > col 3
+  v1 :bool = call check_dr_cell board row col
+  = select v0 false (select v1 true (call check_dr_row board row (+ col 1)))
+
+#fn check_dr :bool board:[i32] row:i32
+  v0 :bool = > row 2
+  v1 :bool = call check_dr_row board row 0
+  = select v0 false (select v1 true (call check_dr board (+ row 1)))
+
+-- Diagonal (down-left) win
+#fn check_dl_cell :bool board:[i32] row:i32 col:i32
+  v0 :i32 = + (* row 7) col
+  = call check_four board v0 (+ v0 6) (+ v0 12) (+ v0 18)
+
+#fn check_dl_row :bool board:[i32] row:i32 col:i32
+  v0 :bool = > col 6
+  v1 :bool = call check_dl_cell board row col
+  = select v0 false (select v1 true (call check_dl_row board row (+ col 1)))
+
+#fn check_dl :bool board:[i32] row:i32
+  v0 :bool = > row 2
+  v1 :bool = call check_dl_row board row 3
+  = select v0 false (select v1 true (call check_dl board (+ row 1)))
+
+#fn has_winner :bool board:[i32]
+  v0 :bool = call check_h board 0
+  v1 :bool = call check_v board 0
+  v2 :bool = call check_dr board 0
+  v3 :bool = call check_dl board 0
+  = or (or v0 v1) (or v2 v3)
+
+-- Check if board is full (no empty cells in top row)
+#fn is_full_col :bool board:[i32] col:i32
+  v0 :bool = > col 6
+  v1 :i32 = select v0 1 (call get board col)
+  = select v0 true (select (!= v1 0) (call is_full_col board (+ col 1)) false)
+
+#fn is_full :bool board:[i32]
+  = call is_full_col board 0
+
+-- ============================================================
+-- AI (simple strategy for computer player)
+-- ============================================================
+
+-- Check if placing in col would win for player
+#fn would_win :bool board:[i32] col:i32 player:i32
+  v0 :i32 = call drop_piece board col
+  v1 :bool = == v0 -1
+  v2 :[i32] = select v1 board (call place_piece board col player)
+  = select v1 false (call has_winner v2)
+
+-- Try to find a winning move, scanning cols 0..6
+#fn find_winning_col :i32 board:[i32] player:i32 col:i32
+  v0 :bool = > col 6
+  v1 :bool = select v0 false (call would_win board col player)
+  = select v0 -1 (select v1 col (call find_winning_col board player (+ col 1)))
+
+-- AI: try win, then block, then prefer center columns
+#fn ai_pick_col :i32 board:[i32] player:i32
+  v0 :i32 = select (== player 1) 2 1
+  v1 :i32 = call find_winning_col board player 0
+  v2 :i32 = call find_winning_col board v0 0
+  v3 :bool = != v1 -1
+  v4 :bool = != v2 -1
+  v5 :i32 = call ai_fallback board 0
+  v6 :i32 = select v4 v2 v5
+  = select v3 v1 v6
+
+-- Fallback: try columns in preferred order (center first)
+-- Order: 3 2 4 1 5 0 6
+#fn ai_fallback :i32 board:[i32] idx:i32
+  v0 :[i32] = [3 2 4 1 5 0 6]
+  v1 :bool = >= idx 7
+  v2 :i32 = select v1 0 (call get v0 idx)
+  v3 :i32 = select v1 -1 (call drop_piece board v2)
+  v4 :bool = != v3 -1
+  = select v1 0 (select v4 v2 (call ai_fallback board (+ idx 1)))
+
+-- ============================================================
+-- Game loop
+-- ============================================================
+
+#fn other_player :i32 p:i32
+  = select (== p 1) 2 1
+
+#fn player_name :text p:i32
+  = select (== p 1) "Player 1 (X)" "Player 2 (O)"
+
+#fn read_col :i32 board:[i32] player:i32
+  v0 :text = call fmt "{0} â€” enter column (1-7): " (call player_name player)
+  call print_no_nl v0
+  v1 :text = call read_line
+  v2 :i32 = cast i32 v1
+  v3 :i32 = - v2 1
+  v4 :bool = and (>= v3 0) (<= v3 6)
+  v5 :i32 = select v4 (call drop_piece board v3) -1
+  v6 :bool = and v4 (!= v5 -1)
+  = select v6 v3 (call read_col_retry board player)
+
+#fn read_col_retry :i32 board:[i32] player:i32
+  call print "Invalid move. Try again."
+  = call read_col board player
+
+-- mode: 0 = PvP, 1 = PvC (player 1 = human, player 2 = computer)
+#fn game_turn :void board:[i32] player:i32 mode:i32 turn:i32
+  call print ""
+  call print_board board
+  v0 :bool = call has_winner board
+  v1 :bool = call is_full board
+  v2 :i32 = call other_player player
+  v3 :text = call fmt "{0} wins!" (call player_name v2)
+  = select v0 (call print v3) (select v1 (call print "It's a draw!") (call do_turn board player mode turn))
+
+#fn do_turn :void board:[i32] player:i32 mode:i32 turn:i32
+  v0 :bool = and (== mode 1) (== player 2)
+  v1 :i32 = select v0 (call ai_pick_col board player) (call read_col board player)
+  v2 :text = select v0 (call fmt "Computer picks column {0}" (+ v1 1)) ""
+  v3 :bool = != v2 ""
+  = select v3 (call do_turn_print board player mode turn v1 v2) (call do_turn_apply board player mode turn v1)
+
+#fn do_turn_print :void board:[i32] player:i32 mode:i32 turn:i32 col:i32 msg:text
+  call print msg
+  = call do_turn_apply board player mode turn col
+
+#fn do_turn_apply :void board:[i32] player:i32 mode:i32 turn:i32 col:i32
+  v0 :[i32] = call place_piece board col player
+  v1 :i32 = call other_player player
+  = call game_turn v0 v1 mode (+ turn 1)
+
+-- ============================================================
+-- Mode selection and entry
+-- ============================================================
+
+#fn select_mode :i32
+  call print "=== Connect 4 ==="
+  call print "1: Player vs Player"
+  call print "2: Player vs Computer"
+  call print_no_nl "Select mode (1 or 2): "
+  v0 :text = call read_line
+  v1 :i32 = cast i32 v0
+  v2 :bool = == v1 1
+  v3 :bool = == v1 2
+  v4 :i32 = select v2 0 (select v3 1 -1)
+  v5 :bool = == v4 -1
+  = select v5 (call select_mode_retry) v4
+
+#fn select_mode_retry :i32
+  call print "Invalid choice. Try again."
+  = call select_mode
+
+-- ============================================================
+-- Tests
+-- ============================================================
+
+#test make_board_size
+  v0 :[i32] = call make_board
+  v1 :i32 = call len v0
+  assert == v1 42
+
+#test drop_piece_empty
+  v0 :[i32] = call make_board
+  v1 :i32 = call drop_piece v0 3
+  assert == v1 5
+
+#test drop_piece_stacked
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 3 1
+  v2 :i32 = call drop_piece v1 3
+  assert == v2 4
+
+#test set_cell_works
+  v0 :[i32] = call make_board
+  v1 :[i32] = call set_cell v0 24 1
+  v2 :i32 = call get v1 24
+  v3 :i32 = call get v1 23
+  assert == v2 1
+  assert == v3 0
+
+#test place_piece_works
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 3 1
+  v2 :i32 = call get v1 38
+  assert == v2 1
+
+#test horizontal_win
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 0 1
+  v2 :[i32] = call place_piece v1 1 1
+  v3 :[i32] = call place_piece v2 2 1
+  v4 :[i32] = call place_piece v3 3 1
+  v5 :bool = call has_winner v4
+  assert v5
+
+#test vertical_win
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 0 2
+  v2 :[i32] = call place_piece v1 0 2
+  v3 :[i32] = call place_piece v2 0 2
+  v4 :[i32] = call place_piece v3 0 2
+  v5 :bool = call has_winner v4
+  assert v5
+
+#test no_winner_yet
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 0 1
+  v2 :[i32] = call place_piece v1 1 2
+  v3 :bool = call has_winner v2
+  assert not v3
+
+#test diagonal_win
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 0 1
+  v2 :[i32] = call place_piece v1 1 2
+  v3 :[i32] = call place_piece v2 1 1
+  v4 :[i32] = call place_piece v3 2 2
+  v5 :[i32] = call place_piece v4 2 2
+  v6 :[i32] = call place_piece v5 2 1
+  v7 :[i32] = call place_piece v6 3 2
+  v8 :[i32] = call place_piece v7 3 2
+  v9 :[i32] = call place_piece v8 3 2
+  v10 :[i32] = call place_piece v9 3 1
+  v11 :bool = call has_winner v10
+  assert v11
+
+#test ai_blocks_win
+  v0 :[i32] = call make_board
+  v1 :[i32] = call place_piece v0 0 1
+  v2 :[i32] = call place_piece v1 1 1
+  v3 :[i32] = call place_piece v2 2 1
+  v4 :i32 = call ai_pick_col v3 2
+  assert == v4 3
+
+-- ============================================================
+-- Entry point
+-- ============================================================
+
+#entry
+  v0 :i32 = call select_mode
+  v1 :[i32] = call make_board
+  call game_turn v1 1 v0 0
+  = 0
