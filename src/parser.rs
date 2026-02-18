@@ -422,7 +422,23 @@ impl Parser {
 
     fn parse_call(&mut self) -> Result<Expr, ParseError> {
         self.advance(); // consume 'call'
-        let name = self.expect_ident()?;
+        // Accept identifiers and keyword tokens that are also builtin names
+        let name = match &self.peek().kind {
+            TokenKind::Ident(name) => {
+                let name = name.clone();
+                self.advance();
+                name
+            }
+            TokenKind::Typeof => {
+                self.advance();
+                "typeof".to_string()
+            }
+            TokenKind::Is => {
+                self.advance();
+                "is".to_string()
+            }
+            _ => return Err(self.error(&format!("expected identifier, got {:?}", self.peek().kind))),
+        };
         let mut args = Vec::new();
         while !self.check_expr_end() {
             args.push(self.parse_atom()?);
