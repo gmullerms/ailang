@@ -97,7 +97,7 @@ ailang/
     lexer.rs        -- Tokenizer (source text -> token stream)
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
-    interpreter.rs  -- Tree-walking interpreter with 43+ built-in functions
+    interpreter.rs  -- Tree-walking interpreter with 44+ built-in functions
     main.rs         -- CLI entry point
   tests/
     integration.rs  -- Integration tests for all example programs
@@ -115,6 +115,7 @@ ailang/
     10_contains_duplicate.ai -- sort then recursive adjacent check
     11_invert_binary_tree.ai -- nested lists as tree, recursive invert
     12_builtins_demo.ai     -- Showcase of find, replace, set, pop, typeof, is
+    13_cond_demo.ai         -- cond expression: classify, grade, fizzbuzz
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
@@ -163,6 +164,11 @@ Conditionals use `select` (lazy — only evaluates the taken branch):
 v0 :i32 = select (> x 0) x (neg x)
 ```
 
+Multi-branch conditionals use `cond` (flat alternative to nested `select`):
+```
+v0 :text = cond (== x 0) "zero" (> x 0) "pos" "neg"
+```
+
 Iteration is functional — no loops:
 ```
 v0 :[i32] = map (fn x:i32 => * x x) nums
@@ -194,7 +200,7 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`
 
 ### List
-`len`, `get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+`len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
 
 ### Type
 `typeof`, `is`
@@ -207,13 +213,15 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 
 ## Testing
 
-AILang has 97 tests: 84 unit tests (lexer, parser, interpreter) and 13 integration tests.
+AILang has 114 tests: 101 unit tests (lexer, parser, interpreter) and 13 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select laziness, builtins, map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
+
+CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
 ## Docs
 

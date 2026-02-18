@@ -322,6 +322,7 @@ impl Lexer {
         let kind = match word.as_str() {
             "call" => TokenKind::Call,
             "select" => TokenKind::Select,
+            "cond" => TokenKind::Cond,
             "match" => TokenKind::Match,
             "map" => TokenKind::Map,
             "filter" => TokenKind::Filter,

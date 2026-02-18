@@ -179,16 +179,16 @@ pub enum Expr {
         then_val: Box<Expr>,
         else_val: Box<Expr>,
     },
+    /// cond cond1 val1 cond2 val2 ... default
+    Cond {
+        branches: Vec<(Box<Expr>, Box<Expr>)>,
+        default: Box<Expr>,
+    },
     /// match val
     ///   Pattern => expr
     Match {
         value: Box<Expr>,
         arms: Vec<MatchArm>,
-    },
-    /// Built-in function: len, concat, sqrt, etc.
-    Builtin {
-        name: String,
-        args: Vec<Expr>,
     },
     /// map fn list
     MapIter {

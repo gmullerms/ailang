@@ -1,0 +1,89 @@
+-- 13_cond_demo.ai
+-- Demonstrates the cond expression: a flat multi-branch alternative to nested select.
+
+-- Classify a number as negative, zero, or positive
+#fn classify :text x:i32
+  = cond (== x 0) "zero" (> x 0) "positive" "negative"
+
+-- Assign a letter grade based on a numeric score
+#fn grade :text score:i32
+  = cond (>= score 90) "A" (>= score 80) "B" (>= score 70) "C" (>= score 60) "D" "F"
+
+-- FizzBuzz using cond instead of nested select
+#fn fizzbuzz :text n:i32
+  = cond (== (% n 15) 0) "FizzBuzz" (== (% n 3) 0) "Fizz" (== (% n 5) 0) "Buzz" (cast text n)
+
+-- Helper: build fizzbuzz list from i to n
+#fn fb_range :text i:i32 n:i32
+  v0 :text = call fizzbuzz i
+  = select (== i n) v0 (+ (+ v0 " ") (call fb_range (+ i 1) n))
+
+-- Tests
+#test classify_zero
+  v0 :text = call classify 0
+  assert == v0 "zero"
+
+#test classify_positive
+  v0 :text = call classify 42
+  assert == v0 "positive"
+
+#test classify_negative
+  v0 :text = call classify -7
+  assert == v0 "negative"
+
+#test grade_A
+  v0 :text = call grade 95
+  assert == v0 "A"
+
+#test grade_B
+  v0 :text = call grade 85
+  assert == v0 "B"
+
+#test grade_C
+  v0 :text = call grade 75
+  assert == v0 "C"
+
+#test grade_D
+  v0 :text = call grade 65
+  assert == v0 "D"
+
+#test grade_F
+  v0 :text = call grade 50
+  assert == v0 "F"
+
+#test grade_boundary_90
+  v0 :text = call grade 90
+  assert == v0 "A"
+
+#test grade_boundary_80
+  v0 :text = call grade 80
+  assert == v0 "B"
+
+#test fizzbuzz_15
+  v0 :text = call fizzbuzz 15
+  assert == v0 "FizzBuzz"
+
+#test fizzbuzz_3
+  v0 :text = call fizzbuzz 3
+  assert == v0 "Fizz"
+
+#test fizzbuzz_5
+  v0 :text = call fizzbuzz 5
+  assert == v0 "Buzz"
+
+#test fizzbuzz_7
+  v0 :text = call fizzbuzz 7
+  assert == v0 "7"
+
+#test fizzbuzz_1
+  v0 :text = call fizzbuzz 1
+  assert == v0 "1"
+
+#entry
+  > call classify -5
+  > call classify 0
+  > call classify 10
+  > call grade 95
+  > call grade 72
+  > call grade 55
+  > call fb_range 1 20

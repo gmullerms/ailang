@@ -1151,3 +1151,13 @@ Functions must be defined before they are called. Helper functions come first, h
 | A long expression                  | Break into intermediate `vN` binds, one per line          |
 | Multi-line statement               | **Not possible.** One line = one statement. Always.       |
 | A recursive call with a base case  | Put recursive `call` inside `select`, never in a bind     |
+
+---
+
+## 18. Deterministic Execution
+
+AILang guarantees fully deterministic execution: given the same source code and the same inputs, a program always produces the same output. There is no implicit randomness, no undefined evaluation order, and no unspecified behavior.
+
+The tree-walking interpreter evaluates expressions in a defined, predictable, left-to-right order within each statement. `select` branches are lazily evaluated, but the choice is deterministic based on the condition value. Functional iteration (`map`, `filter`, `fold`) processes elements sequentially in list order.
+
+This guarantee is critical for AI agents that require reproducible behavior -- an agent can re-run a program and rely on identical results, enabling safe retries, caching, and auditability.

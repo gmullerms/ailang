@@ -1,5 +1,7 @@
 # AILang TODO
 
+> Roadmap informed by review from Grok, ChatGPT, Gemini, and Claude.
+
 ## Short Term — Polish & Robustness (v0.1.x)
 
 ### Testing
@@ -16,21 +18,41 @@
 - [x] `typeof` — return type as text
 - [x] `is` — type check, returns bool
 
+### New Builtins (from LLM review)
+- [x] `safe_get` — like `get` but returns null on out-of-bounds instead of error
+
 ### Bug Fixes & Hardening
 - [x] Handle `read_line` EOF gracefully (returns error "end of input" on EOF)
 - [x] Replace `unwrap()` in `main.rs` thread spawn with `.expect()`
 - [x] Improve error messages with function context (`in 'funcname': ...` wrapping)
-- [ ] Fix `Expr::Builtin` AST variant — parsed but never constructed; remove or wire up
+- [x] Fix `Expr::Builtin` AST variant — removed dead code (never constructed by parser)
+
+### New Language Feature: `cond` (Flat Multi-Branch)
+- [x] Implement `cond` expression: flat alternative to nested `select`
+  ```
+  v0 :text = cond (== x 0) "zero" (> x 0) "pos" "neg"
+  ```
+- [x] Parser: condition-value pairs, odd final element is default
+- [x] Interpreter: evaluate conditions left-to-right, return first matching value (lazy)
+- [ ] Update SPEC.md with `cond` grammar and semantics
+- [x] Add examples demonstrating `cond` vs nested `select` (`13_cond_demo.ai`)
 
 ### Project Quality
 - [x] Expand `.gitignore` (added `.vscode/`, `.idea/`, `*.log`, `.DS_Store`, `.env`, editor swap files)
-- [ ] Add CI with GitHub Actions (`cargo build`, `cargo test`, run example tests)
-- [ ] Add `Cargo.toml` metadata (description, license, repository, authors)
+- [x] Add CI with GitHub Actions (`cargo build`, `cargo test`, run example tests on ubuntu + windows)
+- [x] Add `Cargo.toml` metadata (description, license, repository, authors, keywords, categories)
 - [x] Add more examples: builtins demo (`12_builtins_demo.ai`), Connect 4 game, binary tree invert
+- [x] Document deterministic execution as a language guarantee in SPEC.md (Section 18)
 
 ---
 
 ## Medium Term — Language Completeness (v0.2)
+
+### Tail-Call Optimization
+- [ ] Detect tail-position calls (last expression in function body is `call` or `select` branches are calls)
+- [ ] Reuse stack frame for tail calls instead of growing the call stack
+- [ ] Add tests: deep recursion (10k+ depth) that would stack overflow without TCO
+- [ ] Document TCO guarantee in SPEC.md
 
 ### Pipeline Operator
 - [ ] Implement `|>` pipeline sugar: `val |> fn1 |> fn2` desugars to `call fn2 (call fn1 val)`
@@ -75,17 +97,22 @@
 - [ ] `http_get` / `http_post` for basic HTTP (useful for agent tasks)
 - [ ] `env_get` — read environment variables
 
+### Sandboxed Execution Mode
+- [ ] `--sandbox` flag that restricts I/O (no file, network, or FFI access)
+- [ ] Whitelist-based permission model for agent safety
+- [ ] Sandboxed mode for FFI (restrict which libraries can be loaded)
+
 ### Performance
 - [ ] Profile interpreter on larger programs (fold over 10k+ elements)
 - [ ] Optimize environment cloning (currently full deep clone on every scope)
 - [ ] Consider arena allocation for AST nodes
-- [ ] Tail call optimization for recursive functions
 
 ### Developer Experience
 - [ ] REPL mode: `ailang` with no args launches interactive prompt
 - [x] Better runtime errors: show call stack / function name chain (added `in 'funcname':` wrapping)
 - [ ] `--verbose` flag to trace execution (print each statement as it runs)
 - [ ] Syntax highlighting files (VS Code `.tmLanguage`, tree-sitter grammar)
+- [ ] Restrict overuse of `any` type — emit warnings when `any` is used outside FFI/interop
 
 ---
 
@@ -96,6 +123,12 @@
 - [ ] Implement bytecode compiler (AST -> bytecode)
 - [ ] Implement VM interpreter (faster than tree-walking)
 - [ ] Optional: WASM compilation target
+
+### Canonical Formatter
+- [ ] `ailang fmt` — auto-format AILang source files
+- [ ] Enforce SSA naming convention (`v0`, `v1`, ... in declaration order)
+- [ ] Enforce indentation (2-space body indent)
+- [ ] Enforce canonical operator ordering and spacing
 
 ### Concurrency
 - [ ] `async` / `await` for non-blocking operations
@@ -117,13 +150,15 @@
 - [ ] String encoding control: UTF-8 / UTF-16 / null-terminated
 - [ ] Memory management: `alloc` / `free` wrappers for native buffers
 - [ ] Prebuilt bindings for common libraries (SQLite, OpenSSL, CUDA, ONNX Runtime)
-- [ ] Safety: sandboxed FFI mode that restricts which libraries can be loaded
+
+### Static Analysis
+- [ ] Compile-time recursion safety checks (detect recursive calls not guarded by `select`/`cond`)
+- [ ] Structural hashing for memoization / caching of pure functions
+- [ ] Dataflow graph export (leverage SSA form for analysis tooling)
+- [ ] Linter: detect anti-patterns (Section 17 violations)
 
 ### LSP & Tooling
 - [ ] Language Server Protocol implementation (autocomplete, diagnostics)
-- [ ] Formatter: canonical form enforcement (SSA naming, indentation)
-- [ ] Linter: detect anti-patterns (Section 17 violations)
-- [ ] `ailang fmt` — auto-format AILang source files
 
 ### Package Manager
 - [ ] Package format and registry design
@@ -136,3 +171,25 @@
 - [ ] Fine-tune models on AILang corpus
 - [ ] AILang-to-Python / Python-to-AILang transpiler
 - [ ] Self-hosting: write parts of the AILang toolchain in AILang
+
+---
+
+## LLM Review Summary
+
+Suggestions were collected from **Grok**, **ChatGPT**, **Gemini**, and **Claude** and consolidated above. Key decisions:
+
+| Suggestion | Source | Decision |
+|---|---|---|
+| Tail-call optimization | ChatGPT, Grok, Gemini | **Accepted** — moved to medium-term, critical for recursion-only language |
+| `cond` (flat multi-branch) | Gemini | **Accepted** — short-term, eliminates nested `select` problem |
+| `safe_get` builtin | ChatGPT | **Accepted** — quick win |
+| Sandboxed execution mode | ChatGPT, Claude | **Accepted** — medium-term, important for agent safety |
+| Canonical formatter | Gemini, ChatGPT | **Accepted** — long-term (already planned) |
+| Agent primitives priority | ChatGPT | **Noted** — keep in long-term but acknowledge importance |
+| Deterministic execution docs | ChatGPT, Claude | **Accepted** — short-term, document as guarantee |
+| `any` type restrictions | ChatGPT | **Accepted** — medium-term, warn on overuse |
+| Static analysis (recursion, hashing) | ChatGPT, Gemini | **Accepted** — long-term |
+| Dataflow graph export | ChatGPT | **Accepted** — long-term |
+| Rename SSA to `_n` base-36 | Gemini | **Rejected** — conflicts with `_` private prefix, marginal token gain, hurts readability |
+| `\|?` error pipes | Gemini | **Rejected** — more verbose than `?`, existing `#err` blocks suffice |
+| Controlled loop primitive | ChatGPT | **Rejected** — contradicts language philosophy (functional iteration only) |

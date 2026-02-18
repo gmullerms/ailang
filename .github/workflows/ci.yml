@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build
+        run: cargo build
+
+      - name: Run tests
+        run: cargo test
+
+      - name: Run hello.ai example
+        run: cargo run -- examples/hello.ai
+
+      - name: Run hello.ai tests
+        run: cargo run -- test examples/hello.ai
+
+      - name: Run fizzbuzz example
+        run: cargo run -- examples/02_fizzbuzz.ai
+
+      - name: Run fibonacci example
+        run: cargo run -- examples/05_fibonacci.ai

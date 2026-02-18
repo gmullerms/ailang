@@ -16,6 +16,7 @@ pub enum TokenKind {
     // Keywords
     Call,     // call
     Select,   // select
+    Cond,     // cond
     Match,    // match
     Map,      // map
     Filter,   // filter

@@ -364,6 +364,16 @@ impl Interpreter {
                 }
             }
 
+            Expr::Cond { branches, default } => {
+                for (condition, value) in branches {
+                    let c = self.eval_expr(condition, env)?;
+                    if c.is_truthy() {
+                        return self.eval_expr(value, env);
+                    }
+                }
+                self.eval_expr(default, env)
+            }
+
             Expr::Match { value, arms } => {
                 let val = self.eval_expr(value, env)?;
                 for arm in arms {
@@ -374,12 +384,6 @@ impl Interpreter {
                 Err(RuntimeError {
                     message: "no matching pattern".to_string(),
                 })
-            }
-
-            Expr::Builtin { name, args } => {
-                let arg_vals: Result<Vec<_>, _> =
-                    args.iter().map(|a| self.eval_expr(a, env)).collect();
-                self.call_builtin(name, &arg_vals?)
             }
 
             Expr::MapIter { func, list } => {
@@ -787,6 +791,32 @@ impl Interpreter {
                     });
                 }
             }
+            "safe_get" => {
+                match (&args[0], &args[1]) {
+                    (Value::List(items), Value::Int(idx)) => {
+                        if *idx < 0 {
+                            Some(Value::Null)
+                        } else {
+                            Some(items.get(*idx as usize).cloned().unwrap_or(Value::Null))
+                        }
+                    }
+                    (Value::Text(s), Value::Int(idx)) => {
+                        if *idx < 0 {
+                            Some(Value::Null)
+                        } else {
+                            match s.chars().nth(*idx as usize) {
+                                Some(c) => Some(Value::Text(c.to_string())),
+                                None => Some(Value::Null),
+                            }
+                        }
+                    }
+                    _ => {
+                        return Err(RuntimeError {
+                            message: "safe_get requires a list or text and an index".to_string(),
+                        });
+                    }
+                }
+            }
             "push" => {
                 if let Value::List(items) = &args[0] {
                     let mut new_items = items.clone();
@@ -1100,12 +1130,6 @@ impl Interpreter {
         Ok(result)
     }
 
-    fn call_builtin(&self, name: &str, args: &[Value]) -> Result<Value, RuntimeError> {
-        self.try_builtin(name, args)?.ok_or_else(|| RuntimeError {
-            message: format!("unknown built-in '{}'", name),
-        })
-    }
-
     fn match_pattern(&self, pattern: &Pattern, value: &Value, env: &Env) -> Option<Env> {
         match pattern {
             Pattern::Wildcard => Some(env.clone()),
@@ -1382,6 +1406,45 @@ mod tests {
     fn test_builtin_get() {
         let v = run_program("#entry\n  = call get [10 20 30] 1");
         assert!(matches!(v, Value::Int(20)));
+    }
+
+    // -------------------------------------------------------
+    // safe_get: in-bounds, out-of-bounds, negative index
+    // -------------------------------------------------------
+    #[test]
+    fn test_safe_get_list_in_bounds() {
+        let v = run_program("#entry\n  = call safe_get [10 20 30] 1");
+        assert!(matches!(v, Value::Int(20)));
+    }
+
+    #[test]
+    fn test_safe_get_list_out_of_bounds() {
+        let v = run_program("#entry\n  = call safe_get [10 20 30] 999");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_safe_get_list_negative_index() {
+        let v = run_program("#entry\n  = call safe_get [10 20 30] -1");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_safe_get_text_in_bounds() {
+        let v = run_program("#entry\n  = call safe_get \"hello\" 1");
+        assert!(matches!(v, Value::Text(ref s) if s == "e"));
+    }
+
+    #[test]
+    fn test_safe_get_text_out_of_bounds() {
+        let v = run_program("#entry\n  = call safe_get \"hi\" 999");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_safe_get_text_negative_index() {
+        let v = run_program("#entry\n  = call safe_get \"hi\" -1");
+        assert!(matches!(v, Value::Null));
     }
 
     #[test]
@@ -1664,5 +1727,70 @@ mod tests {
     fn test_or() {
         let v = run_program("#entry\n  = or false true");
         assert!(matches!(v, Value::Bool(true)));
+    }
+
+    // -------------------------------------------------------
+    // Cond expression
+    // -------------------------------------------------------
+    #[test]
+    fn test_cond_two_branches_first_matches() {
+        let v = run_program(
+            "#fn classify :text x:i32\n  = cond (== x 0) \"zero\" (> x 0) \"pos\" \"neg\"\n\n#entry\n  = call classify 0",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "zero"));
+    }
+
+    #[test]
+    fn test_cond_two_branches_second_matches() {
+        let v = run_program(
+            "#fn classify :text x:i32\n  = cond (== x 0) \"zero\" (> x 0) \"pos\" \"neg\"\n\n#entry\n  = call classify 5",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "pos"));
+    }
+
+    #[test]
+    fn test_cond_two_branches_default() {
+        let v = run_program(
+            "#fn classify :text x:i32\n  = cond (== x 0) \"zero\" (> x 0) \"pos\" \"neg\"\n\n#entry\n  = call classify -3",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "neg"));
+    }
+
+    #[test]
+    fn test_cond_single_branch_match() {
+        // Equivalent to select
+        let v = run_program("#entry\n  = cond true 42 99");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_cond_single_branch_default() {
+        let v = run_program("#entry\n  = cond false 42 99");
+        assert!(matches!(v, Value::Int(99)));
+    }
+
+    #[test]
+    fn test_cond_laziness_first_branch() {
+        // If cond evaluated later branches eagerly, division by zero would fire.
+        // Since it's lazy, only the matched branch is evaluated.
+        let v = run_program("#entry\n  = cond true 1 false (/ 1 0) 99");
+        assert!(matches!(v, Value::Int(1)));
+    }
+
+    #[test]
+    fn test_cond_laziness_default() {
+        // Neither branch condition is true, so we get default.
+        // The values of branches that don't match are never evaluated.
+        let v = run_program("#entry\n  = cond false (/ 1 0) false (/ 1 0) 42");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_cond_nested() {
+        // Nested cond inside a cond value
+        let v = run_program(
+            "#entry\n  v0 :i32 = 5\n  = cond (> v0 10) \"big\" (> v0 0) (cond (> v0 3) \"medium\" \"small\") \"negative\"",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "medium"));
     }
 }
