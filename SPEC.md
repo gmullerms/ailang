@@ -303,9 +303,11 @@ shr a n
 
 ### 5.8 I/O Operations
 
-| Operation            | Description           | Status      |
-|----------------------|-----------------------|-------------|
-| `call print args...` | Print to stdout       | Implemented |
+| Operation              | Description                              | Status      |
+|------------------------|------------------------------------------|-------------|
+| `call print args...`   | Print to stdout (with newline and flush) | Implemented |
+| `call print_no_nl args...` | Print to stdout without newline (for prompts) | Implemented |
+| `call read_line`       | Read one line from stdin, return trimmed text | Implemented |
 
 ### 5.9 Map Operations
 
@@ -614,7 +616,7 @@ Every program has exactly one `#entry` block. It is always the **last** block in
 
 Tests are flat blocks. `assert EXPR` — if the expression evaluates to `false` or is an error, the test fails. No test frameworks, no ceremony.
 
-Run tests with `ailang test <file.ai>`. Both tests and the `#entry` block execute. Test results are printed to stderr with `PASS:` or `FAIL:` prefixes.
+Run tests with `ailang test <file.ai>`. In test mode, only `#test` blocks execute — the `#entry` block is skipped. This allows interactive programs (that use `read_line`) to have tests that run cleanly without stdin. Test results are printed to stderr with `PASS:` or `FAIL:` prefixes.
 
 ---
 
@@ -761,22 +763,29 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Type system: all primitives parsed, compound types parsed, `cast` executed
 - Error handling: `try`, `unwrap`, `ok` wrap
 - Agent primitives: `tool` (stub), `log` (stderr output)
-- 34 built-in functions (see sections 5.5–5.9)
+- I/O: `print`, `print_no_nl`, `read_line` (interactive stdin)
+- 37 built-in functions (see sections 5.5–5.9)
 - Lambdas/closures with environment capture
 - Grouped sub-expressions
-- Tests with `assert`
+- Tests with `assert` (test-only mode skips `#entry`)
+- Graceful `cast`: text-to-int returns 0 on invalid input
 
 ### What's Planned (v0.2+)
+- FFI: `#extern` blocks for calling native functions from .dll/.so/.dylib
 - Concurrency: `async`/`await`, `par`, channels (`chan`/`send`/`recv`)
 - Pipelines: `|>` operator
 - Iteration: `zip`, `flatmap`
 - Module system: `#use` loading, visibility rules
 - Agent primitives: `prompt`/`prompt_json`, `store_get`/`store_set`/`store_del`, `observe`
 - JSON operations: `jget`, `jset`, `jstr`, `jparse`
+- File I/O: `read_file`, `write_file`
+- HTTP: `http_get`, `http_post`
 - Additional builtins: `find`, `replace`, `set`, `pop`, `typeof`, `is`
 - Error propagation: `?` operator
 - Byte literals
 - Compiler backend (bytecode or native)
+
+See [TODO.md](TODO.md) for the full prioritized roadmap.
 
 ---
 

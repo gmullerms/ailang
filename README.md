@@ -65,7 +65,7 @@ Release binary: `target/release/ailang`.
 ./target/debug/ailang test examples/hello.ai
 ```
 
-Both modes execute the `#test` blocks. In test mode, `#entry` also runs after tests.
+Both modes execute the `#test` blocks. In test mode, `#entry` is skipped so interactive programs (using `read_line`) can have tests that run cleanly.
 
 ### Example output
 ```
@@ -76,6 +76,10 @@ running tests...
   PASS: square_works
   PASS: abs_positive
   PASS: abs_negative
+```
+
+```
+$ ./target/debug/ailang examples/hello.ai
 [info] greeting: Hello AILang
 [info] 10 + 20 = 30
 [info] 7 squared = 49
@@ -107,8 +111,11 @@ ailang/
     08_merge_sorted_lists.ai -- recursive merge with lazy select
     09_climbing_stairs.ai    -- fold with [prev curr] accumulator
     10_contains_duplicate.ai -- sort then recursive adjacent check
+    11_invert_binary_tree.ai -- nested lists as tree, recursive invert
+    connect4.ai             -- Connect 4 game: PvP and PvC with AI
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
+  TODO.md           -- Prioritized roadmap (short/medium/long term)
 ```
 
 ## Language Quick Start
@@ -190,12 +197,13 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
 
 ### I/O
-`print`, `log`
+`print`, `print_no_nl`, `read_line`, `log`
 
 ## Docs
 
 - **[SPEC.md](SPEC.md)** — Full language specification with grammar, types, operations, and code generation guide
 - **[MANIFESTO.md](MANIFESTO.md)** — Why human programming languages are wrong for AI, with side-by-side comparisons
+- **[TODO.md](TODO.md)** — Prioritized roadmap: FFI, modules, compiler backend, agent primitives
 
 ## License
 
