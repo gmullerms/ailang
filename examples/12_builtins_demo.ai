@@ -86,28 +86,16 @@
   = 0
 
 #test pop_basic
-  v0 :any = call pop [1 2 3]
-  v1 :any = v0.0
-  v2 :i32 = v0.1
-  v3 :i32 = call len v1
-  assert == v3 2
-  assert == v2 3
+  v0 :text = call to_text (call pop [1 2 3])
+  assert == v0 "([1 2] 3)"
 
 #test pop_single
-  v0 :any = call pop [42]
-  v1 :any = v0.0
-  v2 :i32 = v0.1
-  v3 :i32 = call len v1
-  assert == v3 0
-  assert == v2 42
+  v0 :text = call to_text (call pop [42])
+  assert == v0 "([] 42)"
 
 #test pop_empty
-  v0 :any = call pop []
-  v1 :any = v0.0
-  v2 :any = v0.1
-  v3 :i32 = call len v1
-  assert == v3 0
-  assert == v2 null
+  v0 :text = call to_text (call pop [])
+  assert == v0 "([] null)"
 
 -- ===== typeof =====
 

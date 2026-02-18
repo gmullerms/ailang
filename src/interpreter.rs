@@ -1179,3 +1179,482 @@ impl std::fmt::Display for RuntimeError {
         write!(f, "runtime error: {}", self.message)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+    use crate::parser::Parser;
+
+    /// Helper: parse + run an AILang program and return the result value
+    fn run_program(source: &str) -> Value {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("parser failed");
+        let mut interp = Interpreter::new();
+        interp.run(program, false).expect("runtime error")
+    }
+
+    /// Helper: parse + run, expecting a runtime error
+    fn run_program_err(source: &str) -> RuntimeError {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("parser failed");
+        let mut interp = Interpreter::new();
+        interp.run(program, false).expect_err("expected runtime error")
+    }
+
+    /// Helper: run tests only (test_only=true), returning Ok if all pass
+    fn run_tests_only(source: &str) -> Result<Value, RuntimeError> {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("parser failed");
+        let mut interp = Interpreter::new();
+        interp.run(program, true)
+    }
+
+    // -------------------------------------------------------
+    // Arithmetic: + - * / %
+    // -------------------------------------------------------
+    #[test]
+    fn test_arithmetic_add() {
+        let v = run_program("#entry\n  = + 3 4");
+        assert!(matches!(v, Value::Int(7)));
+    }
+
+    #[test]
+    fn test_arithmetic_sub() {
+        let v = run_program("#entry\n  = - 10 3");
+        assert!(matches!(v, Value::Int(7)));
+    }
+
+    #[test]
+    fn test_arithmetic_mul() {
+        let v = run_program("#entry\n  = * 6 7");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_arithmetic_div() {
+        let v = run_program("#entry\n  = / 15 3");
+        assert!(matches!(v, Value::Int(5)));
+    }
+
+    #[test]
+    fn test_arithmetic_mod() {
+        let v = run_program("#entry\n  = % 17 5");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_arithmetic_negative() {
+        let v = run_program("#entry\n  = + -3 -7");
+        assert!(matches!(v, Value::Int(-10)));
+    }
+
+    #[test]
+    fn test_division_by_zero() {
+        let e = run_program_err("#entry\n  = / 1 0");
+        assert!(e.message.contains("division by zero"));
+    }
+
+    // -------------------------------------------------------
+    // Comparison: == != < >
+    // -------------------------------------------------------
+    #[test]
+    fn test_comparison_eq_true() {
+        let v = run_program("#entry\n  = == 5 5");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_comparison_eq_false() {
+        let v = run_program("#entry\n  = == 5 3");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_comparison_neq() {
+        let v = run_program("#entry\n  = != 5 3");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_comparison_lt() {
+        let v = run_program("#entry\n  = < 3 5");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_comparison_gt() {
+        let v = run_program("#fn f :bool\n  = (> 5 3)\n\n#entry\n  = call f");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    // -------------------------------------------------------
+    // Select laziness (only evaluates taken branch)
+    // -------------------------------------------------------
+    #[test]
+    fn test_select_true_branch() {
+        let v = run_program("#entry\n  = select true 42 99");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_select_false_branch() {
+        let v = run_program("#entry\n  = select false 42 99");
+        assert!(matches!(v, Value::Int(99)));
+    }
+
+    #[test]
+    fn test_select_laziness_true() {
+        // If select evaluated both branches eagerly, the false branch
+        // would cause a division by zero. Since it's lazy, only the
+        // true branch is evaluated.
+        let v = run_program("#entry\n  = select true 1 (/ 1 0)");
+        assert!(matches!(v, Value::Int(1)));
+    }
+
+    #[test]
+    fn test_select_laziness_false() {
+        // Conversely, the true branch would blow up but isn't evaluated.
+        let v = run_program("#entry\n  = select false (/ 1 0) 2");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    // -------------------------------------------------------
+    // Function call
+    // -------------------------------------------------------
+    #[test]
+    fn test_function_call() {
+        let v = run_program(
+            "#fn add :i32 a:i32 b:i32\n  = + a b\n\n#entry\n  = call add 10 20",
+        );
+        assert!(matches!(v, Value::Int(30)));
+    }
+
+    #[test]
+    fn test_function_call_recursive() {
+        let v = run_program(
+            "#fn fact :i32 n:i32\n  = select (<= n 1) 1 (* n (call fact (- n 1)))\n\n#entry\n  = call fact 5",
+        );
+        assert!(matches!(v, Value::Int(120)));
+    }
+
+    // -------------------------------------------------------
+    // Builtins: len, concat, push, get, head, tail, range, reverse, abs, min, max
+    // -------------------------------------------------------
+    #[test]
+    fn test_builtin_len_list() {
+        let v = run_program("#entry\n  = call len [1 2 3]");
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    #[test]
+    fn test_builtin_len_text() {
+        let v = run_program("#entry\n  = call len \"hello\"");
+        assert!(matches!(v, Value::Int(5)));
+    }
+
+    #[test]
+    fn test_builtin_concat() {
+        let v = run_program("#entry\n  = call concat \"hello\" \" world\"");
+        assert!(matches!(v, Value::Text(ref s) if s == "hello world"));
+    }
+
+    #[test]
+    fn test_builtin_push() {
+        let v = run_program("#entry\n  v0 :[i32] = call push [1 2] 3\n  = call len v0");
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    #[test]
+    fn test_builtin_get() {
+        let v = run_program("#entry\n  = call get [10 20 30] 1");
+        assert!(matches!(v, Value::Int(20)));
+    }
+
+    #[test]
+    fn test_builtin_head() {
+        let v = run_program("#entry\n  = call head [10 20 30]");
+        assert!(matches!(v, Value::Int(10)));
+    }
+
+    #[test]
+    fn test_builtin_head_empty() {
+        let v = run_program("#entry\n  = call head []");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_builtin_tail() {
+        let v = run_program("#entry\n  v0 :[i32] = call tail [10 20 30]\n  = call len v0");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_builtin_range() {
+        let v = run_program("#entry\n  v0 :[i32] = call range 0 5\n  = call len v0");
+        assert!(matches!(v, Value::Int(5)));
+    }
+
+    #[test]
+    fn test_builtin_reverse() {
+        let v = run_program("#entry\n  v0 :[i32] = call reverse [1 2 3]\n  = call head v0");
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    #[test]
+    fn test_builtin_abs() {
+        let v = run_program("#entry\n  = call abs -42");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_builtin_abs_positive() {
+        let v = run_program("#entry\n  = call abs 7");
+        assert!(matches!(v, Value::Int(7)));
+    }
+
+    #[test]
+    fn test_builtin_min() {
+        let v = run_program("#entry\n  = call min 3 7");
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    #[test]
+    fn test_builtin_max() {
+        let v = run_program("#entry\n  = call max 3 7");
+        assert!(matches!(v, Value::Int(7)));
+    }
+
+    // -------------------------------------------------------
+    // Map operations: mget, mset, mdel, mkeys, mhas
+    // -------------------------------------------------------
+    #[test]
+    fn test_mget() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1 \"b\" 2}\n  = call mget v0 \"b\"");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_mget_missing() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1}\n  = call mget v0 \"z\"");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_mset() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1}\n  v1 :any = call mset v0 \"b\" 2\n  = call mget v1 \"b\"");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_mset_overwrite() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1}\n  v1 :any = call mset v0 \"a\" 99\n  = call mget v1 \"a\"");
+        assert!(matches!(v, Value::Int(99)));
+    }
+
+    #[test]
+    fn test_mdel() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1 \"b\" 2}\n  v1 :any = call mdel v0 \"a\"\n  = call mhas v1 \"a\"");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_mkeys() {
+        let v = run_program("#entry\n  v0 :any = {\"x\" 1 \"y\" 2}\n  v1 :[text] = call mkeys v0\n  = call len v1");
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_mhas_true() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1}\n  = call mhas v0 \"a\"");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_mhas_false() {
+        let v = run_program("#entry\n  v0 :any = {\"a\" 1}\n  = call mhas v0 \"z\"");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    // -------------------------------------------------------
+    // Fold, map, filter
+    // -------------------------------------------------------
+    #[test]
+    fn test_fold_sum() {
+        let v = run_program(
+            "#fn add :i32 a:i32 b:i32\n  = + a b\n\n#entry\n  = fold [1 2 3 4 5] 0 add",
+        );
+        assert!(matches!(v, Value::Int(15)));
+    }
+
+    #[test]
+    fn test_fold_with_lambda() {
+        let v = run_program(
+            "#entry\n  = fold [1 2 3] 0 (fn a:i32 b:i32 => + a b)",
+        );
+        assert!(matches!(v, Value::Int(6)));
+    }
+
+    #[test]
+    fn test_map_with_fn() {
+        let v = run_program(
+            "#fn double :i32 x:i32\n  = * x 2\n\n#entry\n  v0 :[i32] = map double [1 2 3]\n  = call get v0 2",
+        );
+        assert!(matches!(v, Value::Int(6)));
+    }
+
+    #[test]
+    fn test_map_with_lambda() {
+        let v = run_program(
+            "#entry\n  v0 :[i32] = map (fn x:i32 => + x 10) [1 2 3]\n  = call get v0 0",
+        );
+        assert!(matches!(v, Value::Int(11)));
+    }
+
+    #[test]
+    fn test_filter_with_lambda() {
+        let v = run_program(
+            "#entry\n  v0 :[i32] = filter (fn x:i32 => (> x 2)) [1 2 3 4 5]\n  = call len v0",
+        );
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    // -------------------------------------------------------
+    // Cast operations
+    // -------------------------------------------------------
+    #[test]
+    fn test_cast_int_to_text() {
+        let v = run_program("#entry\n  = cast text 42");
+        assert!(matches!(v, Value::Text(ref s) if s == "42"));
+    }
+
+    #[test]
+    fn test_cast_text_to_int() {
+        let v = run_program("#entry\n  = cast i32 \"123\"");
+        assert!(matches!(v, Value::Int(123)));
+    }
+
+    #[test]
+    fn test_cast_int_to_float() {
+        let v = run_program("#entry\n  = cast f64 5");
+        if let Value::Float(f) = v {
+            assert!((f - 5.0).abs() < f64::EPSILON);
+        } else {
+            panic!("expected float");
+        }
+    }
+
+    #[test]
+    fn test_cast_float_to_int() {
+        let v = run_program("#entry\n  = cast i32 3.7");
+        assert!(matches!(v, Value::Int(3)));
+    }
+
+    #[test]
+    fn test_cast_bool_to_int() {
+        let v = run_program("#entry\n  = cast i32 true");
+        assert!(matches!(v, Value::Int(1)));
+    }
+
+    #[test]
+    fn test_cast_bool_to_text() {
+        let v = run_program("#entry\n  = cast text false");
+        assert!(matches!(v, Value::Text(ref s) if s == "false"));
+    }
+
+    // -------------------------------------------------------
+    // read_line is recognized as a builtin (no "unknown builtin" error)
+    // -------------------------------------------------------
+    #[test]
+    fn test_read_line_is_recognized() {
+        // We cannot actually call read_line in a test (it reads stdin),
+        // but we verify it doesn't produce "unknown built-in" by checking
+        // that it exists in the try_builtin match arms.
+        let interp = Interpreter::new();
+        // Calling with no actual stdin will still not produce "unknown built-in".
+        // It would try to read from stdin and fail or succeed.
+        // We verify by checking the try_builtin return is Some (not None).
+        let result = interp.try_builtin("read_line", &[]);
+        assert!(result.is_ok(), "read_line should be a recognized builtin");
+        // It should return Some(...) not None
+        let inner = result.unwrap();
+        assert!(inner.is_some(), "read_line should not return None (unknown)");
+    }
+
+    // -------------------------------------------------------
+    // Test block execution
+    // -------------------------------------------------------
+    #[test]
+    fn test_ailang_test_passes() {
+        let src = "#fn add :i32 a:i32 b:i32\n  = + a b\n\n#test add_works\n  v0 :i32 = call add 2 3\n  assert == v0 5";
+        let result = run_tests_only(src);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_ailang_test_fails() {
+        let src = "#fn add :i32 a:i32 b:i32\n  = + a b\n\n#test add_wrong\n  v0 :i32 = call add 2 3\n  assert == v0 99";
+        let result = run_tests_only(src);
+        assert!(result.is_err());
+    }
+
+    // -------------------------------------------------------
+    // Text operations
+    // -------------------------------------------------------
+    #[test]
+    fn test_text_concatenation_via_add() {
+        let v = run_program("#entry\n  = + \"hello\" \" world\"");
+        assert!(matches!(v, Value::Text(ref s) if s == "hello world"));
+    }
+
+    // -------------------------------------------------------
+    // Null handling
+    // -------------------------------------------------------
+    #[test]
+    fn test_null_equality() {
+        let v = run_program("#entry\n  = == null null");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_null_neq() {
+        let v = run_program("#entry\n  = != null 1");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    // -------------------------------------------------------
+    // Unary ops
+    // -------------------------------------------------------
+    #[test]
+    fn test_neg() {
+        let v = run_program("#entry\n  = neg 42");
+        assert!(matches!(v, Value::Int(-42)));
+    }
+
+    #[test]
+    fn test_not() {
+        let v = run_program("#entry\n  = not true");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    // -------------------------------------------------------
+    // Logic
+    // -------------------------------------------------------
+    #[test]
+    fn test_and() {
+        let v = run_program("#entry\n  = and true false");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_or() {
+        let v = run_program("#entry\n  = or false true");
+        assert!(matches!(v, Value::Bool(true)));
+    }
+}

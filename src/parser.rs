@@ -898,3 +898,311 @@ impl std::fmt::Display for ParseError {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lexer::Lexer;
+
+    /// Helper: lex + parse source, return the Program
+    fn parse_source(source: &str) -> Program {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        parser.parse().expect("parser failed")
+    }
+
+    /// Helper: lex + parse, expect failure
+    fn parse_source_err(source: &str) -> ParseError {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        parser.parse().expect_err("expected parse error")
+    }
+
+    // -------------------------------------------------------
+    // 1. Parsing a simple function
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_simple_function() {
+        let src = "#fn add :i32 a:i32 b:i32\n  = + a b";
+        let prog = parse_source(src);
+
+        assert_eq!(prog.functions.len(), 1);
+        let f = &prog.functions[0];
+        assert_eq!(f.name, "add");
+        assert_eq!(f.params.len(), 2);
+        assert_eq!(f.params[0].name, "a");
+        assert_eq!(f.params[1].name, "b");
+
+        // Return type should be i32
+        assert!(matches!(f.return_type, AiType::I32));
+
+        // Body should have exactly one statement (a return)
+        assert_eq!(f.body.len(), 1);
+        assert!(matches!(f.body[0], Stmt::Return { .. }));
+    }
+
+    // -------------------------------------------------------
+    // 2. Parsing select expression
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_select_expression() {
+        let src = "#fn f :i32 x:i32\n  = select (> x 0) x (neg x)";
+        let prog = parse_source(src);
+
+        assert_eq!(prog.functions.len(), 1);
+        let f = &prog.functions[0];
+        assert_eq!(f.body.len(), 1);
+
+        if let Stmt::Return { value } = &f.body[0] {
+            assert!(matches!(value, Expr::Select { .. }));
+            if let Expr::Select { cond, then_val, else_val } = value {
+                assert!(matches!(cond.as_ref(), Expr::BinOp { op: BinOpKind::Gt, .. }));
+                assert!(matches!(then_val.as_ref(), Expr::Var(ref name) if name == "x"));
+                assert!(matches!(else_val.as_ref(), Expr::UnaryOp { op: UnaryOpKind::Neg, .. }));
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    // -------------------------------------------------------
+    // 3. Parsing list literal
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_list_literal() {
+        let src = "#fn f :[i32]\n  = [1 2 3]";
+        let prog = parse_source(src);
+
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::ListLit(elements) = value {
+                assert_eq!(elements.len(), 3);
+                assert!(matches!(elements[0], Expr::IntLit(1)));
+                assert!(matches!(elements[1], Expr::IntLit(2)));
+                assert!(matches!(elements[2], Expr::IntLit(3)));
+            } else {
+                panic!("expected ListLit, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    // -------------------------------------------------------
+    // 4. Parsing map literal
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_map_literal() {
+        let src = "#fn f :any\n  = {\"key\" 42}";
+        let prog = parse_source(src);
+
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::MapLit(pairs) = value {
+                assert_eq!(pairs.len(), 1);
+                assert!(matches!(&pairs[0].0, Expr::TextLit(ref s) if s == "key"));
+                assert!(matches!(pairs[0].1, Expr::IntLit(42)));
+            } else {
+                panic!("expected MapLit, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    // -------------------------------------------------------
+    // 5. Parsing lambda
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_lambda() {
+        let src = "#fn f :i32\n  = (fn x:i32 => * x x)";
+        let prog = parse_source(src);
+
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Lambda { params, body } = value {
+                assert_eq!(params.len(), 1);
+                assert_eq!(params[0].name, "x");
+                assert!(matches!(params[0].ty, AiType::I32));
+                assert!(matches!(body.as_ref(), Expr::BinOp { op: BinOpKind::Mul, .. }));
+            } else {
+                panic!("expected Lambda, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    // -------------------------------------------------------
+    // 6. Parsing call with grouped args
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_call_grouped_args() {
+        let src = "#fn f :i32 a:i32\n  = call foo (+ a 1)";
+        let prog = parse_source(src);
+
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Call { name, args } = value {
+                assert_eq!(name, "foo");
+                assert_eq!(args.len(), 1);
+                assert!(matches!(&args[0], Expr::BinOp { op: BinOpKind::Add, .. }));
+            } else {
+                panic!("expected Call, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    // -------------------------------------------------------
+    // 7. Parse error on invalid input
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_error_invalid_input() {
+        let err = parse_source_err("42");
+        assert!(err.message.contains("expected"));
+    }
+
+    #[test]
+    fn test_parse_error_missing_return_type() {
+        let err = parse_source_err("#fn foo");
+        assert!(err.message.contains("expected"));
+    }
+
+    // -------------------------------------------------------
+    // Additional parser tests
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_test_block() {
+        let src = "#fn add :i32 a:i32 b:i32\n  = + a b\n\n#test add_basic\n  v0 :i32 = call add 2 3\n  assert == v0 5";
+        let prog = parse_source(src);
+
+        assert_eq!(prog.functions.len(), 1);
+        assert_eq!(prog.tests.len(), 1);
+        assert_eq!(prog.tests[0].name, "add_basic");
+        assert_eq!(prog.tests[0].body.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_entry_block() {
+        let src = "#entry\n  = 0";
+        let prog = parse_source(src);
+        assert!(prog.entry.is_some());
+    }
+
+    #[test]
+    fn test_parse_const() {
+        let src = "#const PI :f64 = 3.14";
+        let prog = parse_source(src);
+        assert_eq!(prog.consts.len(), 1);
+        assert_eq!(prog.consts[0].name, "PI");
+        assert!(matches!(prog.consts[0].ty, AiType::F64));
+    }
+
+    #[test]
+    fn test_parse_multiple_params() {
+        let src = "#fn f :i32 a:i32 b:i32 c:text\n  = a";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        assert_eq!(f.params.len(), 3);
+        assert_eq!(f.params[2].name, "c");
+        assert!(matches!(f.params[2].ty, AiType::Text));
+    }
+
+    #[test]
+    fn test_parse_empty_list() {
+        let src = "#fn f :[i32]\n  = []";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::ListLit(elems) = value {
+                assert_eq!(elems.len(), 0);
+            } else {
+                panic!("expected empty list literal");
+            }
+        } else {
+            panic!("expected return");
+        }
+    }
+
+    #[test]
+    fn test_parse_bind_statement() {
+        let src = "#fn f :i32\n  v0 :i32 = 42\n  = v0";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        assert_eq!(f.body.len(), 2);
+        assert!(matches!(&f.body[0], Stmt::Bind { name, .. } if name == "v0"));
+        assert!(matches!(&f.body[1], Stmt::Return { .. }));
+    }
+
+    #[test]
+    fn test_parse_nested_select() {
+        let src = "#fn f :i32 x:i32\n  = select (> x 10) 1 (select (> x 0) 0 -1)";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Select { else_val, .. } = value {
+                assert!(matches!(else_val.as_ref(), Expr::Select { .. }));
+            } else {
+                panic!("expected select");
+            }
+        } else {
+            panic!("expected return");
+        }
+    }
+
+    #[test]
+    fn test_parse_map_iter() {
+        let src = "#fn f :[i32] xs:[i32]\n  = map (fn x:i32 => + x 1) xs";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            assert!(matches!(value, Expr::MapIter { .. }));
+        } else {
+            panic!("expected return with MapIter");
+        }
+    }
+
+    #[test]
+    fn test_parse_fold_iter() {
+        let src = "#fn f :i32 xs:[i32]\n  = fold xs 0 (fn a:i32 b:i32 => + a b)";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            assert!(matches!(value, Expr::FoldIter { .. }));
+        } else {
+            panic!("expected return with FoldIter");
+        }
+    }
+
+    #[test]
+    fn test_parse_filter_iter() {
+        let src = "#fn f :[i32] xs:[i32]\n  = filter (fn x:i32 => > x 0) xs";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            assert!(matches!(value, Expr::FilterIter { .. }));
+        } else {
+            panic!("expected return with FilterIter");
+        }
+    }
+
+    #[test]
+    fn test_parse_cast() {
+        let src = "#fn f :text x:i32\n  = cast text x";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Cast { target, .. } = value {
+                assert!(matches!(target, AiType::Text));
+            } else {
+                panic!("expected Cast");
+            }
+        } else {
+            panic!("expected return");
+        }
+    }
+}
