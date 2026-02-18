@@ -18,13 +18,26 @@ fn main() {
     }
 }
 
+const VERSION: &str = "0.1.0";
+
+const BANNER: &str = r#"
+     _    ___ _
+    / \  |_ _| |    __ _ _ __   __ _
+   / _ \  | || |   / _` | '_ \ / _` |
+  / ___ \ | || |__| (_| | | | | (_| |
+ /_/   \_\___|_____\__,_|_| |_|\__, |
+                                |___/
+"#;
+
 fn run() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("ailang v0.1.0");
-        eprintln!("usage: ailang <file.ai>");
-        eprintln!("       ailang test <file.ai>");
+        eprintln!("{}", BANNER);
+        eprintln!("  AILang v{} — A programming language for AI agents", VERSION);
+        eprintln!("  Not for humans.\n");
+        eprintln!("  usage: ailang <file.ai>");
+        eprintln!("         ailang test <file.ai>");
         process::exit(1);
     }
 
@@ -37,6 +50,8 @@ fn run() {
     } else {
         (false, &args[1])
     };
+
+    eprintln!("AILang v{} | {}", VERSION, file_path);
 
     let source = match fs::read_to_string(file_path) {
         Ok(s) => s,
@@ -65,6 +80,17 @@ fn run() {
             process::exit(1);
         }
     };
+
+    let fn_count = program.functions.len();
+    let test_count = program.tests.len();
+    let has_entry = program.entry.is_some();
+
+    eprintln!(
+        "  parsed: {} fn | {} test | entry: {}",
+        fn_count,
+        test_count,
+        if has_entry { "yes" } else { "no" }
+    );
 
     if run_tests_only {
         eprintln!("running tests...");
