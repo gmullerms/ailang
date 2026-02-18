@@ -2,5 +2,11 @@
 name = "ailang"
 version = "0.1.0"
 edition = "2024"
+description = "A programming language designed for AI agents"
+license = "MIT"
+repository = "https://github.com/gmullerms/ailang"
+authors = ["gmullerms"]
+keywords = ["programming-language", "ai", "agents", "interpreter"]
+categories = ["compilers", "command-line-utilities"]
 
 [dependencies]

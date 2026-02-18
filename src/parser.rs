@@ -320,6 +320,9 @@ impl Parser {
             // Select
             TokenKind::Select => self.parse_select(),
 
+            // Cond
+            TokenKind::Cond => self.parse_cond(),
+
             // Match
             TokenKind::Match => self.parse_match(),
 
@@ -455,6 +458,35 @@ impl Parser {
             cond: Box::new(cond),
             then_val: Box::new(then_val),
             else_val: Box::new(else_val),
+        })
+    }
+
+    fn parse_cond(&mut self) -> Result<Expr, ParseError> {
+        self.advance(); // consume 'cond'
+        // Parse alternating condition-value pairs, with an odd final element as default.
+        // Minimum: cond cond1 val1 default (3 expressions)
+        let mut exprs = Vec::new();
+        while !self.check_expr_end() {
+            exprs.push(self.parse_expr()?);
+        }
+        // Need at least 3 expressions (1 condition + 1 value + 1 default)
+        if exprs.len() < 3 || exprs.len() % 2 == 0 {
+            return Err(self.error(
+                "cond requires alternating condition-value pairs and a default (odd number of args, minimum 3)",
+            ));
+        }
+        // Last element is the default
+        let default = exprs.pop().unwrap();
+        // Remaining elements are condition-value pairs
+        let mut branches = Vec::new();
+        let mut iter = exprs.into_iter();
+        while let Some(condition) = iter.next() {
+            let value = iter.next().unwrap();
+            branches.push((Box::new(condition), Box::new(value)));
+        }
+        Ok(Expr::Cond {
+            branches,
+            default: Box::new(default),
         })
     }
 
@@ -806,6 +838,7 @@ impl Parser {
             self.peek().kind,
             TokenKind::Call
                 | TokenKind::Select
+                | TokenKind::Cond
                 | TokenKind::Match
                 | TokenKind::Map
                 | TokenKind::Filter
@@ -1220,5 +1253,61 @@ mod tests {
         } else {
             panic!("expected return");
         }
+    }
+
+    // -------------------------------------------------------
+    // Cond expression parsing
+    // -------------------------------------------------------
+    #[test]
+    fn test_parse_cond_two_branches_and_default() {
+        let src = "#fn f :text x:i32\n  = cond (== x 0) \"zero\" (> x 0) \"pos\" \"neg\"";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Cond { branches, default } = value {
+                assert_eq!(branches.len(), 2);
+                // First branch condition: == x 0
+                assert!(matches!(branches[0].0.as_ref(), Expr::BinOp { op: BinOpKind::Eq, .. }));
+                // First branch value: "zero"
+                assert!(matches!(branches[0].1.as_ref(), Expr::TextLit(s) if s == "zero"));
+                // Second branch condition: > x 0
+                assert!(matches!(branches[1].0.as_ref(), Expr::BinOp { op: BinOpKind::Gt, .. }));
+                // Second branch value: "pos"
+                assert!(matches!(branches[1].1.as_ref(), Expr::TextLit(s) if s == "pos"));
+                // Default: "neg"
+                assert!(matches!(default.as_ref(), Expr::TextLit(s) if s == "neg"));
+            } else {
+                panic!("expected Cond, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    #[test]
+    fn test_parse_cond_single_branch_and_default() {
+        let src = "#fn f :text x:bool\n  = cond x \"yes\" \"no\"";
+        let prog = parse_source(src);
+        let f = &prog.functions[0];
+        if let Stmt::Return { value } = &f.body[0] {
+            if let Expr::Cond { branches, default } = value {
+                assert_eq!(branches.len(), 1);
+                assert!(matches!(branches[0].0.as_ref(), Expr::Var(s) if s == "x"));
+                assert!(matches!(branches[0].1.as_ref(), Expr::TextLit(s) if s == "yes"));
+                assert!(matches!(default.as_ref(), Expr::TextLit(s) if s == "no"));
+            } else {
+                panic!("expected Cond, got {:?}", value);
+            }
+        } else {
+            panic!("expected return statement");
+        }
+    }
+
+    #[test]
+    fn test_parse_cond_error_even_args() {
+        // Even number of args (2) should fail — need odd >= 3
+        let src = "#fn f :text x:bool\n  = cond x \"yes\"";
+        let err = parse_source_err(src);
+        assert!(err.message.contains("cond requires"));
     }
 }
