@@ -41,6 +41,7 @@ pub enum TokenKind {
     False,    // false
     Null,     // null
     Panic,    // panic
+    Error,    // error
     Retry,    // retry
     Fallback, // fallback
     Send,     // send

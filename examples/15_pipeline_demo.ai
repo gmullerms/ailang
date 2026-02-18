@@ -1,0 +1,36 @@
+#fn double :i32 x:i32
+  = * x 2
+
+#fn add :i32 a:i32 b:i32
+  = + a b
+
+#entry
+  v0 :i32 = 5 |> double
+  log "info" "5 |> double = {0}" v0
+
+  v1 :i32 = 5 |> double |> double
+  log "info" "5 |> double |> double = {0}" v1
+
+  v2 :i32 = 5 |> double |> add 3
+  log "info" "5 |> double |> add 3 = {0}" v2
+
+  v3 :text = "  hello world  " |> trim |> upper
+  log "info" "trimmed and uppered: {0}" v3
+
+  = 0
+
+#test pipeline_double
+  v0 :i32 = 5 |> double
+  assert (== v0 10)
+
+#test pipeline_chain
+  v0 :i32 = 5 |> double |> double
+  assert (== v0 20)
+
+#test pipeline_with_args
+  v0 :i32 = 5 |> double |> add 3
+  assert (== v0 13)
+
+#test pipeline_text
+  v0 :text = "  hello  " |> trim |> upper
+  assert (== v0 "HELLO")

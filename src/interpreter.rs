@@ -145,12 +145,15 @@ enum Signal {
     Return(Value),
     Emit(Value),
     Continue,
+    /// Tail call optimization: instead of recursing, return the call info
+    TailCall { name: String, args: Vec<Value> },
 }
 
 pub struct Interpreter {
     functions: HashMap<String, FnDecl>,
     type_defs: HashMap<String, TypeDecl>,
     constants: HashMap<String, Value>,
+    error_handlers: HashMap<String, ErrHandler>,
 }
 
 impl Interpreter {
@@ -159,6 +162,7 @@ impl Interpreter {
             functions: HashMap::new(),
             type_defs: HashMap::new(),
             constants: HashMap::new(),
+            error_handlers: HashMap::new(),
         }
     }
 
@@ -175,6 +179,11 @@ impl Interpreter {
 
         for f in program.functions {
             self.functions.insert(f.name.clone(), f);
+        }
+
+        // Register error handlers
+        for eh in program.error_handlers {
+            self.error_handlers.insert(eh.fn_name.clone(), eh);
         }
 
         // Run tests if any
@@ -227,6 +236,9 @@ impl Interpreter {
                     result = val;
                 }
                 Signal::Continue => {}
+                Signal::TailCall { name, args } => {
+                    return self.call_function(&name, &args, env);
+                }
             }
         }
 
@@ -664,41 +676,238 @@ impl Interpreter {
             return Ok(result);
         }
 
-        // Look up user-defined function
-        let func = self.functions.get(name).ok_or_else(|| RuntimeError {
-            message: format!("undefined function '{}'", name),
-        })?;
+        // Check for error handler
+        let handler = self.error_handlers.get(name);
 
-        // Clone what we need to avoid borrow issues
-        let params = func.params.clone();
-        let body = func.body.clone();
-
-        let mut fn_env = Env::new();
-
-        // Bind constants
-        for (cname, cval) in &self.constants {
-            fn_env.set(cname.clone(), cval.clone());
+        // If there is no error handler, call directly without interception
+        if handler.is_none() {
+            return self.call_function_inner(name, args);
         }
 
-        // Bind parameters
-        for (i, param) in params.iter().enumerate() {
-            if let Some(val) = args.get(i) {
-                fn_env.set(param.name.clone(), (*val).clone());
-            } else {
-                return Err(RuntimeError {
-                    message: format!(
-                        "function '{}' expected {} args, got {}",
-                        name,
-                        params.len(),
-                        args.len()
-                    ),
-                });
+        // There IS an error handler — use retry/fallback logic
+        let handler = handler.unwrap();
+        let max_attempts = handler.retry_count
+            .map(|n| (n as usize) + 1)
+            .unwrap_or(1);
+
+        let mut last_error_msg = String::new();
+
+        for _attempt in 0..max_attempts {
+            match self.call_function_inner(name, args) {
+                Ok(Value::Err(msg)) => {
+                    // Function returned an error value — eligible for handler
+                    last_error_msg = msg;
+                    continue; // retry if attempts remain
+                }
+                Err(e) => {
+                    // Function raised a runtime error (e.g., from ? propagation)
+                    // Strip the "in 'name': " prefix if present for handler use
+                    let prefix = format!("in '{}': ", name);
+                    last_error_msg = if e.message.starts_with(&prefix) {
+                        e.message[prefix.len()..].to_string()
+                    } else {
+                        e.message
+                    };
+                    continue; // retry if attempts remain
+                }
+                Ok(val) => return Ok(val), // success
             }
         }
 
-        self.exec_body(&body, &mut fn_env).map_err(|e| RuntimeError {
-            message: format!("in '{}': {}", name, e.message),
+        // All attempts exhausted — apply fallback if present
+        if let Some(fallback_expr) = &handler.fallback {
+            let mut handler_env = Env::new();
+            for (cname, cval) in &self.constants {
+                handler_env.set(cname.clone(), cval.clone());
+            }
+            handler_env.set("err".to_string(), Value::Text(last_error_msg));
+            return self.eval_expr(fallback_expr, &handler_env);
+        }
+
+        // Handler exists but has no fallback — propagate the error
+        Err(RuntimeError {
+            message: format!("in '{}': {}", name, last_error_msg),
         })
+    }
+
+    /// Inner function call logic with TCO trampoline, without error handler wrapping.
+    fn call_function_inner(
+        &self,
+        name: &str,
+        args: &[Value],
+    ) -> Result<Value, RuntimeError> {
+        // Trampoline loop for tail-call optimization
+        let mut current_name = name.to_string();
+        let mut current_args = args.to_vec();
+        let original_name = name.to_string();
+
+        loop {
+            // Look up user-defined function
+            let func = self.functions.get(&current_name).ok_or_else(|| RuntimeError {
+                message: format!("undefined function '{}'", current_name),
+            })?;
+
+            // Clone what we need to avoid borrow issues
+            let params = func.params.clone();
+            let body = func.body.clone();
+
+            if params.len() != current_args.len() {
+                return Err(RuntimeError {
+                    message: format!(
+                        "function '{}' expected {} args, got {}",
+                        current_name,
+                        params.len(),
+                        current_args.len()
+                    ),
+                });
+            }
+
+            let mut fn_env = Env::new();
+
+            // Bind constants
+            for (cname, cval) in &self.constants {
+                fn_env.set(cname.clone(), cval.clone());
+            }
+
+            // Bind parameters
+            for (i, param) in params.iter().enumerate() {
+                fn_env.set(param.name.clone(), current_args[i].clone());
+            }
+
+            match self.exec_body_tco(&body, &mut fn_env) {
+                Ok(Signal::TailCall { name: tc_name, args: tc_args }) => {
+                    // Check if the tail call target is a builtin
+                    if let Some(result) = self.try_builtin(&tc_name, &tc_args)? {
+                        return Ok(result);
+                    }
+                    // Loop with new function name and args (trampoline)
+                    current_name = tc_name;
+                    current_args = tc_args;
+                    continue;
+                }
+                Ok(Signal::Return(val)) => return Ok(val),
+                Ok(Signal::Emit(val)) => return Ok(val),
+                Ok(Signal::Continue) => return Ok(Value::Void),
+                Err(e) => {
+                    return Err(RuntimeError {
+                        message: format!("in '{}': {}", original_name, e.message),
+                    });
+                }
+            }
+        }
+    }
+
+    /// Execute a function body with tail-call optimization awareness.
+    /// The last Return statement in the body is evaluated in tail position,
+    /// which means a Call in that position returns Signal::TailCall instead
+    /// of recursing.
+    fn exec_body_tco(&self, body: &[Stmt], env: &mut Env) -> Result<Signal, RuntimeError> {
+        if body.is_empty() {
+            return Ok(Signal::Return(Value::Void));
+        }
+
+        // Find the index of the last statement
+        let last_idx = body.len() - 1;
+
+        // Execute all statements except the last one normally
+        for stmt in &body[..last_idx] {
+            match self.exec_stmt(stmt, env)? {
+                Signal::Return(val) => return Ok(Signal::Return(val)),
+                Signal::Emit(val) => {
+                    println!("{}", val);
+                }
+                Signal::Continue => {}
+                Signal::TailCall { .. } => unreachable!(),
+            }
+        }
+
+        // Handle the last statement with tail-call awareness
+        let last_stmt = &body[last_idx];
+        match last_stmt {
+            Stmt::Return { value } => {
+                // Evaluate in tail position
+                self.eval_expr_tail(value, env)
+            }
+            // Non-return statements are not in tail position
+            _ => {
+                match self.exec_stmt(last_stmt, env)? {
+                    Signal::Return(val) => Ok(Signal::Return(val)),
+                    Signal::Emit(val) => {
+                        println!("{}", val);
+                        Ok(Signal::Return(val))
+                    }
+                    Signal::Continue => Ok(Signal::Return(Value::Void)),
+                    Signal::TailCall { .. } => unreachable!(),
+                }
+            }
+        }
+    }
+
+    /// Evaluate an expression in tail position. If it is a Call to a
+    /// user-defined function, return Signal::TailCall instead of recursing.
+    /// For Select/Cond/Match, propagate tail position into branches.
+    fn eval_expr_tail(&self, expr: &Expr, env: &Env) -> Result<Signal, RuntimeError> {
+        match expr {
+            Expr::Call { name, args } => {
+                let arg_vals: Result<Vec<_>, _> =
+                    args.iter().map(|a| self.eval_expr(a, env)).collect();
+                let arg_vals = arg_vals?;
+
+                // Check if it is a builtin -- builtins do not need TCO
+                if let Some(val) = self.try_builtin(name, &arg_vals)? {
+                    return Ok(Signal::Return(val));
+                }
+
+                // It is a user-defined function call in tail position
+                if self.functions.contains_key(name.as_str()) {
+                    Ok(Signal::TailCall {
+                        name: name.clone(),
+                        args: arg_vals,
+                    })
+                } else {
+                    // Unknown function - let call_function produce the error
+                    let val = self.call_function(name, &arg_vals, env)?;
+                    Ok(Signal::Return(val))
+                }
+            }
+
+            Expr::Select { cond, then_val, else_val } => {
+                let c = self.eval_expr(cond, env)?;
+                if c.is_truthy() {
+                    self.eval_expr_tail(then_val, env)
+                } else {
+                    self.eval_expr_tail(else_val, env)
+                }
+            }
+
+            Expr::Cond { branches, default } => {
+                for (condition, value) in branches {
+                    let c = self.eval_expr(condition, env)?;
+                    if c.is_truthy() {
+                        return self.eval_expr_tail(value, env);
+                    }
+                }
+                self.eval_expr_tail(default, env)
+            }
+
+            Expr::Match { value, arms } => {
+                let val = self.eval_expr(value, env)?;
+                for arm in arms {
+                    if let Some(match_env) = self.match_pattern(&arm.pattern, &val, env) {
+                        return self.eval_expr_tail(&arm.body, &match_env);
+                    }
+                }
+                Err(RuntimeError {
+                    message: "no matching pattern".to_string(),
+                })
+            }
+
+            // For any other expression, evaluate normally
+            _ => {
+                let val = self.eval_expr(expr, env)?;
+                Ok(Signal::Return(val))
+            }
+        }
     }
 
     fn apply_fn(&self, func: &Value, args: &[Value], env: &Env) -> Result<Value, RuntimeError> {
@@ -1124,6 +1333,40 @@ impl Interpreter {
                 let type_name = self.expect_text(&args[0])?;
                 let actual = args[1].type_name();
                 Some(Value::Bool(type_name == actual))
+            }
+            // I/O & file builtins
+            "read_file" => {
+                let path = self.expect_text(&args[0])?;
+                match std::fs::read_to_string(path) {
+                    Ok(contents) => Some(Value::Text(contents)),
+                    Err(e) => return Err(RuntimeError {
+                        message: format!("read_file '{}': {}", path, e),
+                    }),
+                }
+            }
+            "write_file" => {
+                let path = self.expect_text(&args[0])?;
+                let content = self.expect_text(&args[1])?;
+                match std::fs::write(path, content) {
+                    Ok(()) => Some(Value::Null),
+                    Err(e) => return Err(RuntimeError {
+                        message: format!("write_file '{}': {}", path, e),
+                    }),
+                }
+            }
+            "env_get" => {
+                let name = self.expect_text(&args[0])?;
+                match std::env::var(name) {
+                    Ok(val) => Some(Value::Text(val)),
+                    Err(std::env::VarError::NotPresent) => Some(Value::Null),
+                    Err(e) => return Err(RuntimeError {
+                        message: format!("env_get '{}': {}", name, e),
+                    }),
+                }
+            }
+            "error" => {
+                let msg = self.expect_text(&args[0])?;
+                Some(Value::Err(msg.to_string()))
             }
             _ => None,
         };
@@ -1792,5 +2035,371 @@ mod tests {
             "#entry\n  v0 :i32 = 5\n  = cond (> v0 10) \"big\" (> v0 0) (cond (> v0 3) \"medium\" \"small\") \"negative\"",
         );
         assert!(matches!(v, Value::Text(ref s) if s == "medium"));
+    }
+
+    // -------------------------------------------------------
+    // File I/O & env builtins
+    // -------------------------------------------------------
+    #[test]
+    fn test_read_file_not_found() {
+        let e = run_program_err(
+            "#entry\n  v0 :text = call read_file \"__nonexistent_ailang_test_file_12345.txt\"\n  = v0",
+        );
+        assert!(
+            e.message.contains("read_file"),
+            "error should mention read_file, got: {}",
+            e.message
+        );
+    }
+
+    #[test]
+    fn test_write_and_read_file() {
+        let mut tmp = std::env::temp_dir();
+        tmp.push("ailang_test_write_read.txt");
+        let path = tmp.to_str().unwrap().replace('\\', "\\\\");
+        let src = format!(
+            "#entry\n  call write_file \"{}\" \"hello from test\"\n  v0 :text = call read_file \"{}\"\n  = v0",
+            path, path
+        );
+        let v = run_program(&src);
+        // Clean up
+        let _ = std::fs::remove_file(&tmp);
+        assert!(
+            matches!(v, Value::Text(ref s) if s == "hello from test"),
+            "expected 'hello from test', got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_env_get_exists() {
+        // PATH is set on virtually every OS
+        let v = run_program("#entry\n  = call env_get \"PATH\"");
+        assert!(
+            matches!(v, Value::Text(_)),
+            "expected PATH to be text, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_env_get_missing() {
+        let v = run_program(
+            "#entry\n  = call env_get \"__AILANG_NONEXISTENT_VAR_XYZ_999__\"",
+        );
+        assert!(
+            matches!(v, Value::Null),
+            "expected null for missing env var, got: {:?}",
+            v
+        );
+    }
+
+    // -------------------------------------------------------
+    // Pipeline operator |>
+    // -------------------------------------------------------
+    #[test]
+    fn test_pipeline_simple() {
+        // 5 |> double => call double 5 => 10
+        let v = run_program(
+            "#fn double :i32 x:i32\n  = * x 2\n\n#entry\n  = 5 |> double",
+        );
+        assert!(matches!(v, Value::Int(10)));
+    }
+
+    #[test]
+    fn test_pipeline_chain() {
+        // 5 |> double |> double => call double (call double 5) => 20
+        let v = run_program(
+            "#fn double :i32 x:i32\n  = * x 2\n\n#entry\n  = 5 |> double |> double",
+        );
+        assert!(matches!(v, Value::Int(20)));
+    }
+
+    #[test]
+    fn test_pipeline_with_builtins() {
+        // "  hello  " |> trim |> upper => "HELLO"
+        let v = run_program(
+            "#entry\n  = \"  hello  \" |> trim |> upper",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "HELLO"));
+    }
+
+    #[test]
+    fn test_pipeline_with_extra_args() {
+        // 5 |> double |> add 3 => call add (call double 5) 3 => add(10, 3) => 13
+        let v = run_program(
+            "#fn double :i32 x:i32\n  = * x 2\n\n#fn add :i32 a:i32 b:i32\n  = + a b\n\n#entry\n  = 5 |> double |> add 3",
+        );
+        assert!(matches!(v, Value::Int(13)));
+    }
+
+    #[test]
+    fn test_pipeline_in_bind() {
+        // Pipeline in a bind statement
+        let v = run_program(
+            "#fn double :i32 x:i32\n  = * x 2\n\n#entry\n  v0 :i32 = 5 |> double\n  = v0",
+        );
+        assert!(matches!(v, Value::Int(10)));
+    }
+
+    #[test]
+    fn test_pipeline_with_concat() {
+        // "hello" |> concat " world" |> upper => "HELLO WORLD"
+        let v = run_program(
+            "#entry\n  = \"hello\" |> concat \" world\" |> upper",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "HELLO WORLD"));
+    }
+
+    // -------------------------------------------------------
+    // Tail-call optimization (TCO)
+    // -------------------------------------------------------
+
+    #[test]
+    fn test_tco_deep_recursion_countdown() {
+        // Without TCO this would stack overflow. countdown(10000) -> 0
+        let v = run_program(
+            "#fn countdown :i32 n:i32\n  = select (<= n 0) 0 (call countdown (- n 1))\n\n#entry\n  v0 :i32 = call countdown 10000\n  = v0",
+        );
+        assert!(matches!(v, Value::Int(0)));
+    }
+
+    #[test]
+    fn test_tco_tail_call_through_select_true_branch() {
+        // Tail call in the true branch of select
+        let v = run_program(
+            "#fn count_up :i32 n:i32 target:i32\n  = select (>= n target) n (call count_up (+ n 1) target)\n\n#entry\n  = call count_up 0 5000",
+        );
+        assert!(matches!(v, Value::Int(5000)));
+    }
+
+    #[test]
+    fn test_tco_tail_call_through_select_false_branch() {
+        // Tail call in the false branch of select
+        let v = run_program(
+            "#fn countdown :i32 n:i32\n  = select (<= n 0) 0 (call countdown (- n 1))\n\n#entry\n  = call countdown 5000",
+        );
+        assert!(matches!(v, Value::Int(0)));
+    }
+
+    #[test]
+    fn test_tco_tail_call_through_cond() {
+        // All cond branches are in tail position
+        let v = run_program(
+            "#fn classify_loop :i32 n:i32\n  = cond (<= n 0) 0 (> n 5000) (call classify_loop (- n 2)) (call classify_loop (- n 1))\n\n#entry\n  = call classify_loop 10000",
+        );
+        assert!(matches!(v, Value::Int(0)));
+    }
+
+    #[test]
+    fn test_tco_cond_default_branch() {
+        // Tail call in the default branch of cond
+        let v = run_program(
+            "#fn loop_down :i32 n:i32\n  = cond (== n 0) 42 (call loop_down (- n 1))\n\n#entry\n  = call loop_down 8000",
+        );
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_tco_mutual_recursion() {
+        // Function A calls B, B calls A -- both in tail position
+        let v = run_program(
+            "#fn is_even :bool n:i32\n  = select (<= n 0) true (call is_odd (- n 1))\n\n#fn is_odd :bool n:i32\n  = select (<= n 0) false (call is_even (- n 1))\n\n#entry\n  = call is_even 10000",
+        );
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_tco_mutual_recursion_odd() {
+        // Verify mutual recursion with odd number
+        let v = run_program(
+            "#fn is_even :bool n:i32\n  = select (<= n 0) true (call is_odd (- n 1))\n\n#fn is_odd :bool n:i32\n  = select (<= n 0) false (call is_even (- n 1))\n\n#entry\n  = call is_odd 9999",
+        );
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_tco_non_tail_call_still_works() {
+        // This is NOT a tail call because there's work after the recursive call:
+        // (* n (call fact (- n 1))) -- the multiplication happens after the call returns.
+        // This should still produce the correct result (no TCO applied).
+        let v = run_program(
+            "#fn fact :i32 n:i32\n  = select (<= n 1) 1 (* n (call fact (- n 1)))\n\n#entry\n  = call fact 10",
+        );
+        assert!(matches!(v, Value::Int(3628800)));
+    }
+
+    #[test]
+    fn test_tco_non_tail_call_addition_after_recursion() {
+        // (+ n (call sum_to (- n 1))) is NOT a tail call because + wraps it.
+        // Using small depth (20) to avoid stack overflow since this cannot use TCO.
+        let v = run_program(
+            "#fn sum_to :i32 n:i32\n  = select (<= n 0) 0 (+ n (call sum_to (- n 1)))\n\n#entry\n  = call sum_to 20",
+        );
+        // sum 1..20 = 210
+        assert!(matches!(v, Value::Int(210)));
+    }
+
+    #[test]
+    fn test_tco_tail_call_to_builtin() {
+        // A tail call to a builtin function should still work correctly
+        let v = run_program(
+            "#fn my_len :i32 lst:[i32]\n  = call len lst\n\n#entry\n  = call my_len [1 2 3 4 5]",
+        );
+        assert!(matches!(v, Value::Int(5)));
+    }
+
+    #[test]
+    fn test_tco_accumulator_pattern() {
+        // Classic TCO-friendly accumulator pattern for sum
+        let v = run_program(
+            "#fn sum_acc :i32 n:i32 acc:i32\n  = select (<= n 0) acc (call sum_acc (- n 1) (+ acc n))\n\n#entry\n  = call sum_acc 10000 0",
+        );
+        // sum 1..10000 = 50005000
+        assert!(matches!(v, Value::Int(50005000)));
+    }
+
+    // -------------------------------------------------------
+    // Error handling: error builtin, ? propagation, #err blocks
+    // -------------------------------------------------------
+
+    #[test]
+    fn test_error_value_creation() {
+        // `error "oops"` creates a Value::Err
+        let v = run_program("#entry\n  = error \"oops\"");
+        assert!(matches!(v, Value::Err(ref s) if s == "oops"));
+    }
+
+    #[test]
+    fn test_error_value_creation_via_call() {
+        // `call error "boom"` also creates a Value::Err
+        let v = run_program("#entry\n  = call error \"boom\"");
+        assert!(matches!(v, Value::Err(ref s) if s == "boom"));
+    }
+
+    #[test]
+    fn test_propagate_error() {
+        // ? on an error value propagates it as a RuntimeError
+        let e = run_program_err(
+            "#fn failing :i32\n  = error \"bad\"\n\n#fn caller :i32\n  v0 :i32 = (call failing)?\n  = v0\n\n#entry\n  = call caller",
+        );
+        assert!(e.message.contains("bad"), "expected 'bad' in error: {}", e.message);
+    }
+
+    #[test]
+    fn test_propagate_value() {
+        // ? on a normal (non-error) value passes it through unchanged
+        let v = run_program("#entry\n  v0 :i32 = 42?\n  = v0");
+        assert!(matches!(v, Value::Int(42)));
+    }
+
+    #[test]
+    fn test_propagate_unwraps_ok() {
+        // ? on Value::Ok(v) unwraps to v
+        let v = run_program("#entry\n  v0 :i32 = (ok 99)?\n  = v0");
+        assert!(matches!(v, Value::Int(99)));
+    }
+
+    #[test]
+    fn test_err_handler_catches() {
+        // #err block catches an error from a function and provides a fallback
+        let v = run_program(
+            "#fn might_fail :text\n  = error \"oops\"\n\n#err might_fail\n  fallback \"recovered\"\n\n#entry\n  = call might_fail",
+        );
+        assert!(
+            matches!(v, Value::Text(ref s) if s == "recovered"),
+            "expected 'recovered', got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_err_handler_not_triggered() {
+        // #err block does NOT run when the function succeeds
+        let v = run_program(
+            "#fn works :text\n  = \"ok\"\n\n#err works\n  fallback \"fallback\"\n\n#entry\n  = call works",
+        );
+        assert!(
+            matches!(v, Value::Text(ref s) if s == "ok"),
+            "expected 'ok', got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_err_handler_with_err_variable() {
+        // The fallback expression can reference `err` (the error message)
+        let v = run_program(
+            "#fn boom :text\n  = error \"kaboom\"\n\n#err boom\n  fallback err\n\n#entry\n  = call boom",
+        );
+        assert!(
+            matches!(v, Value::Text(ref s) if s == "kaboom"),
+            "expected 'kaboom', got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_error_is_check() {
+        // `is "err" val` returns true when val is an error
+        let v = run_program(
+            "#entry\n  v0 :any = error \"oops\"\n  = call is \"err\" v0",
+        );
+        assert!(matches!(v, Value::Bool(true)));
+    }
+
+    #[test]
+    fn test_error_is_check_not_error() {
+        // `is "err" val` returns false for non-error values
+        let v = run_program("#entry\n  = call is \"err\" 42");
+        assert!(matches!(v, Value::Bool(false)));
+    }
+
+    #[test]
+    fn test_error_propagation_chain() {
+        // Error propagates through multiple function calls
+        let v = run_program(
+            "#fn inner :i32\n  = error \"deep\"\n\n#fn middle :i32\n  v0 :i32 = (call inner)?\n  = + v0 1\n\n#fn outer :text\n  v0 :i32 = (call middle)?\n  = cast text v0\n\n#err outer\n  fallback err\n\n#entry\n  = call outer",
+        );
+        assert!(
+            matches!(v, Value::Text(ref s) if s.contains("deep")),
+            "expected error containing 'deep', got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_error_select_conditional() {
+        // error inside select — only created when the branch is taken
+        let v = run_program(
+            "#fn safe_div :f64 a:f64 b:f64\n  = select (== b 0.0) (error \"division by zero\") (/ a b)\n\n#entry\n  = call safe_div 10.0 2.0",
+        );
+        if let Value::Float(f) = v {
+            assert!((f - 5.0).abs() < f64::EPSILON);
+        } else {
+            panic!("expected float, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_error_select_error_path() {
+        // error path of select returns Value::Err
+        let v = run_program(
+            "#fn safe_div :f64 a:f64 b:f64\n  = select (== b 0.0) (error \"division by zero\") (/ a b)\n\n#entry\n  = call safe_div 10.0 0.0",
+        );
+        assert!(
+            matches!(v, Value::Err(ref s) if s == "division by zero"),
+            "expected error, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_err_handler_catches_propagated_error() {
+        // #err handler catches errors that bubble up via ? inside the function
+        let v = run_program(
+            "#fn inner :i32\n  = error \"inner_fail\"\n\n#fn outer :i32\n  v0 :i32 = (call inner)?\n  = + v0 1\n\n#err outer\n  fallback 0\n\n#entry\n  = call outer",
+        );
+        assert!(matches!(v, Value::Int(0)), "expected 0, got: {:?}", v);
     }
 }

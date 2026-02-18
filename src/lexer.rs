@@ -347,6 +347,7 @@ impl Lexer {
             "false" => TokenKind::BoolLit(false),
             "null" => TokenKind::NullLit,
             "panic" => TokenKind::Panic,
+            "error" => TokenKind::Error,
             "retry" => TokenKind::Retry,
             "fallback" => TokenKind::Fallback,
             "send" => TokenKind::Send,
