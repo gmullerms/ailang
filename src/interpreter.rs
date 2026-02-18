@@ -1035,6 +1035,59 @@ impl Interpreter {
                     return Err(RuntimeError { message: "mhas requires a map and key".to_string() });
                 }
             }
+            "find" => {
+                let haystack = self.expect_text(&args[0])?;
+                let needle = self.expect_text(&args[1])?;
+                match haystack.find(needle) {
+                    Some(pos) => Some(Value::Int(pos as i64)),
+                    None => Some(Value::Int(-1)),
+                }
+            }
+            "replace" => {
+                let s = self.expect_text(&args[0])?;
+                let old = self.expect_text(&args[1])?;
+                let new = self.expect_text(&args[2])?;
+                Some(Value::Text(s.replacen(old, new, 1)))
+            }
+            "set" => {
+                if let (Value::List(items), Value::Int(idx)) = (&args[0], &args[1]) {
+                    let i = *idx as usize;
+                    if i < items.len() {
+                        let mut new_items = items.clone();
+                        new_items[i] = args[2].clone();
+                        Some(Value::List(new_items))
+                    } else {
+                        Some(Value::List(items.clone()))
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        message: "set requires a list and index".to_string(),
+                    });
+                }
+            }
+            "pop" => {
+                if let Value::List(items) = &args[0] {
+                    if items.is_empty() {
+                        Some(Value::Tuple(vec![Value::List(Vec::new()), Value::Null]))
+                    } else {
+                        let last = items.last().unwrap().clone();
+                        let new_list = Value::List(items[..items.len() - 1].to_vec());
+                        Some(Value::Tuple(vec![new_list, last]))
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        message: "pop requires a list".to_string(),
+                    });
+                }
+            }
+            "typeof" => {
+                Some(Value::Text(args[0].type_name().to_string()))
+            }
+            "is" => {
+                let type_name = self.expect_text(&args[0])?;
+                let actual = args[1].type_name();
+                Some(Value::Bool(type_name == actual))
+            }
             _ => None,
         };
         Ok(result)

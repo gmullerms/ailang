@@ -1,0 +1,198 @@
+-- Builtins Demo: find, replace, set, pop, typeof, is
+-- Tests and demonstrations for all 6 new builtins
+
+-- ===== find =====
+
+#fn demo_find :void
+  v0 :i32 = call find "hello world" "world"
+  v1 :i32 = call find "hello" "xyz"
+  log "info" "find 'world' in 'hello world' = {0}" v0
+  log "info" "find 'xyz' in 'hello' = {0}" v1
+  = 0
+
+#test find_basic
+  v0 :i32 = call find "hello world" "world"
+  assert == v0 6
+
+#test find_at_start
+  v0 :i32 = call find "hello world" "hello"
+  assert == v0 0
+
+#test find_not_found
+  v0 :i32 = call find "hello" "xyz"
+  assert == v0 -1
+
+#test find_empty_needle
+  v0 :i32 = call find "hello" ""
+  assert == v0 0
+
+-- ===== replace =====
+
+#fn demo_replace :void
+  v0 :text = call replace "hello world" "world" "AILang"
+  v1 :text = call replace "aaa" "a" "b"
+  log "info" "replace 'world' with 'AILang' = {0}" v0
+  log "info" "replace first 'a' with 'b' = {0}" v1
+  = 0
+
+#test replace_basic
+  v0 :text = call replace "hello world" "world" "AILang"
+  assert == v0 "hello AILang"
+
+#test replace_first_only
+  v0 :text = call replace "aaa" "a" "b"
+  assert == v0 "baa"
+
+#test replace_not_found
+  v0 :text = call replace "hello" "xyz" "abc"
+  assert == v0 "hello"
+
+-- ===== set =====
+
+#fn demo_set :void
+  v0 :[i32] = call set [1 2 3] 1 99
+  log "info" "set [1 2 3] index 1 to 99 = {0}" v0
+  = 0
+
+#test set_basic
+  v0 :[i32] = call set [1 2 3] 1 99
+  v1 :i32 = call get v0 0
+  v2 :i32 = call get v0 1
+  v3 :i32 = call get v0 2
+  assert == v1 1
+  assert == v2 99
+  assert == v3 3
+
+#test set_first
+  v0 :[i32] = call set [10 20 30] 0 42
+  v1 :i32 = call get v0 0
+  assert == v1 42
+
+#test set_last
+  v0 :[i32] = call set [10 20 30] 2 42
+  v1 :i32 = call get v0 2
+  assert == v1 42
+
+#test set_out_of_range
+  v0 :[i32] = call set [1 2 3] 10 99
+  v1 :i32 = call len v0
+  assert == v1 3
+
+-- ===== pop =====
+
+#fn demo_pop :void
+  v0 :any = call pop [1 2 3]
+  log "info" "pop [1 2 3] = {0}" v0
+  = 0
+
+#test pop_basic
+  v0 :any = call pop [1 2 3]
+  v1 :any = v0.0
+  v2 :i32 = v0.1
+  v3 :i32 = call len v1
+  assert == v3 2
+  assert == v2 3
+
+#test pop_single
+  v0 :any = call pop [42]
+  v1 :any = v0.0
+  v2 :i32 = v0.1
+  v3 :i32 = call len v1
+  assert == v3 0
+  assert == v2 42
+
+#test pop_empty
+  v0 :any = call pop []
+  v1 :any = v0.0
+  v2 :any = v0.1
+  v3 :i32 = call len v1
+  assert == v3 0
+  assert == v2 null
+
+-- ===== typeof =====
+
+#fn demo_typeof :void
+  v0 :text = call typeof 42
+  v1 :text = call typeof "hello"
+  v2 :text = call typeof [1 2 3]
+  v3 :text = call typeof true
+  v4 :text = call typeof null
+  log "info" "typeof 42 = {0}" v0
+  log "info" "typeof 'hello' = {0}" v1
+  log "info" "typeof [1 2 3] = {0}" v2
+  log "info" "typeof true = {0}" v3
+  log "info" "typeof null = {0}" v4
+  = 0
+
+#test typeof_int
+  v0 :text = call typeof 42
+  assert == v0 "i32"
+
+#test typeof_text
+  v0 :text = call typeof "hello"
+  assert == v0 "text"
+
+#test typeof_list
+  v0 :text = call typeof [1 2 3]
+  assert == v0 "list"
+
+#test typeof_bool
+  v0 :text = call typeof true
+  assert == v0 "bool"
+
+#test typeof_null
+  v0 :text = call typeof null
+  assert == v0 "null"
+
+-- ===== is =====
+
+#fn demo_is :void
+  v0 :bool = call is "i32" 42
+  v1 :bool = call is "text" 42
+  v2 :bool = call is "list" [1 2]
+  log "info" "is 'i32' 42 = {0}" v0
+  log "info" "is 'text' 42 = {0}" v1
+  log "info" "is 'list' [1 2] = {0}" v2
+  = 0
+
+#test is_int_true
+  v0 :bool = call is "i32" 42
+  assert v0
+
+#test is_int_false
+  v0 :bool = call is "text" 42
+  assert not v0
+
+#test is_text_true
+  v0 :bool = call is "text" "hello"
+  assert v0
+
+#test is_list_true
+  v0 :bool = call is "list" [1 2]
+  assert v0
+
+#test is_bool_true
+  v0 :bool = call is "bool" true
+  assert v0
+
+#test is_null_true
+  v0 :bool = call is "null" null
+  assert v0
+
+-- ===== Entry: run all demos =====
+
+#entry
+  log "info" "=== find ==="
+  call demo_find
+  log "info" "=== replace ==="
+  call demo_replace
+  log "info" "=== set ==="
+  call demo_set
+  log "info" "=== pop ==="
+  call demo_pop
+  log "info" "=== typeof ==="
+  call demo_typeof
+  log "info" "=== is ==="
+  call demo_is
+  log "info" "All demos complete."
+  = 0
