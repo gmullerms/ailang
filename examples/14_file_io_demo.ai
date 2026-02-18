@@ -1,22 +1,20 @@
 #fn main_demo :i32
-  -- Write a file
-  call write_file "test_output.txt" "Hello from AILang!"
-  v0 :text = call read_file "test_output.txt"
-  log "info" "file contents: {0}" v0
-  -- Read env var
-  v1 :text = call env_get "PATH"
-  v2 :bool = != v1 null
-  log "info" "PATH exists: {0}" v2
+  v0 :any = call write_file "test_output.txt" "Hello from AILang!"
+  v1 :text = call read_file "test_output.txt"
+  log "info" "file contents: {0}" v1
+  v2 :text = call env_get "PATH"
+  v3 :bool = != v2 null
+  log "info" "PATH exists: {0}" v3
   = 0
 
 #test file_round_trip
-  call write_file "test_tmp_ailang.txt" "round trip test"
-  v0 :text = call read_file "test_tmp_ailang.txt"
-  assert (== v0 "round trip test") "file round trip failed"
+  v0 :any = call write_file "test_tmp_ailang.txt" "round trip test"
+  v1 :text = call read_file "test_tmp_ailang.txt"
+  assert == v1 "round trip test"
 
 #test env_get_path
-  v0 = call env_get "PATH"
-  assert (!= v0 null) "PATH should exist"
+  v0 :text = call env_get "PATH"
+  assert != v0 null
 
 #entry
   v0 :i32 = call main_demo
