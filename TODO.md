@@ -115,7 +115,7 @@
 - [x] Better runtime errors: show call stack / function name chain (added `in 'funcname':` wrapping)
 - [x] `--verbose` / `-v` flag to trace execution (function calls, binds, tests, modules)
 - [x] Syntax highlighting: VS Code extension (`editors/vscode/ailang/`) with tmLanguage grammar
-- [ ] Restrict overuse of `any` type — emit warnings when `any` is used outside FFI/interop
+- [x] Restrict overuse of `any` type — emit warnings when `any` is used outside FFI/interop
 
 ---
 
@@ -128,10 +128,10 @@
 - [ ] Optional: WASM compilation target
 
 ### Canonical Formatter
-- [ ] `ailang fmt` — auto-format AILang source files
-- [ ] Enforce SSA naming convention (`v0`, `v1`, ... in declaration order)
-- [ ] Enforce indentation (2-space body indent)
-- [ ] Enforce canonical operator ordering and spacing
+- [x] `ailang fmt` — auto-format AILang source files
+- [x] Enforce SSA naming convention (`v0`, `v1`, ... in declaration order)
+- [x] Enforce indentation (2-space body indent)
+- [x] Enforce canonical operator ordering and spacing
 
 ### Concurrency
 - [ ] `async` / `await` for non-blocking operations

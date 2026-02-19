@@ -74,6 +74,13 @@ Both modes execute the `#test` blocks. In test mode, `#entry` is skipped so inte
 
 Launches the interactive REPL. Define functions with `#fn` (multi-line block), evaluate expressions inline. Type `exit` to quit.
 
+### Format a file
+```
+./target/debug/ailang fmt examples/hello.ai
+```
+
+Rewrites the file in canonical form: SSA variable renaming (`v0`, `v1`, ...), 2-space indentation, canonical block ordering (`#use` -> `#const` -> `#fn` -> `#test` -> `#err` -> `#entry`), and normalized spacing. Idempotent — running it twice produces the same output.
+
 ### Flags
 ```
 ./target/debug/ailang --sandbox examples/hello.ai    # Restrict file/env/network I/O
@@ -112,6 +119,8 @@ ailang/
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
     interpreter.rs  -- Tree-walking interpreter with 55+ built-in functions, TCO
+    formatter.rs    -- Canonical formatter (ailang fmt)
+    warnings.rs     -- Static analysis warnings (:any type usage)
     json.rs         -- JSON parser/serializer (no dependencies)
     main.rs         -- CLI entry point + REPL
   tests/
@@ -264,13 +273,13 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 
 ## Testing
 
-AILang has 192 tests: 171 unit tests (lexer, parser, interpreter) and 21 integration tests.
+AILang has 262 tests: 236 unit tests (lexer, parser, interpreter, formatter, warnings) and 26 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system and HTTP tests.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, canonical formatting (SSA renaming, block ordering, expression grouping), `:any` type warnings, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system, HTTP, formatter, and warning tests.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
