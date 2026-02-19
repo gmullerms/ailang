@@ -160,6 +160,8 @@ pub struct Interpreter {
     loading_modules: HashSet<PathBuf>,
     /// The base directory used to resolve std library imports
     std_dir: Option<PathBuf>,
+    /// When true, I/O builtins (read_file, write_file, env_get) are blocked
+    pub sandboxed: bool,
 }
 
 impl Interpreter {
@@ -181,6 +183,7 @@ impl Interpreter {
             error_handlers: HashMap::new(),
             loading_modules: HashSet::new(),
             std_dir,
+            sandboxed: false,
         }
     }
 
@@ -1271,6 +1274,18 @@ impl Interpreter {
     }
 
     fn try_builtin(&self, name: &str, args: &[Value]) -> Result<Option<Value>, RuntimeError> {
+        // Sandbox: block restricted I/O operations early
+        if self.sandboxed {
+            match name {
+                "read_file" => return Ok(Some(Value::Err("sandbox: file read not permitted".to_string()))),
+                "write_file" => return Ok(Some(Value::Err("sandbox: file write not permitted".to_string()))),
+                "env_get" => return Ok(Some(Value::Err("sandbox: environment access not permitted".to_string()))),
+                "http_get" => return Ok(Some(Value::Err("sandbox: network access not permitted".to_string()))),
+                "http_post" => return Ok(Some(Value::Err("sandbox: network access not permitted".to_string()))),
+                _ => {}
+            }
+        }
+
         let result = match name {
             "concat" => {
                 let a = self.expect_text(&args[0])?;
@@ -3219,5 +3234,69 @@ mod tests {
             Ok(None) => panic!("http_get should be a recognized builtin, got None"),
             Err(_) => {} // recognized but threw an error (still recognized)
         }
+    }
+
+    // -------------------------------------------------------
+    // Sandbox mode
+    // -------------------------------------------------------
+
+    /// Helper: parse + run an AILang program in sandbox mode and return the result value
+    fn run_program_sandboxed(source: &str) -> Value {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("parser failed");
+        let mut interp = Interpreter::new();
+        interp.sandboxed = true;
+        interp.run(program, false).expect("runtime error")
+    }
+
+    #[test]
+    fn test_sandbox_blocks_read_file() {
+        let v = run_program_sandboxed(
+            "#entry\n  = call read_file \"somefile.txt\"",
+        );
+        assert!(
+            matches!(v, Value::Err(ref s) if s == "sandbox: file read not permitted"),
+            "expected sandbox error for read_file, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_sandbox_blocks_write_file() {
+        let v = run_program_sandboxed(
+            "#entry\n  = call write_file \"somefile.txt\" \"data\"",
+        );
+        assert!(
+            matches!(v, Value::Err(ref s) if s == "sandbox: file write not permitted"),
+            "expected sandbox error for write_file, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_sandbox_blocks_env_get() {
+        let v = run_program_sandboxed(
+            "#entry\n  = call env_get \"PATH\"",
+        );
+        assert!(
+            matches!(v, Value::Err(ref s) if s == "sandbox: environment access not permitted"),
+            "expected sandbox error for env_get, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_sandbox_allows_print() {
+        // print should still work in sandbox mode (returns Void)
+        let v = run_program_sandboxed(
+            "#entry\n  call print \"hello\"\n  = 42",
+        );
+        assert!(
+            matches!(v, Value::Int(42)),
+            "expected 42 (print should work in sandbox), got: {:?}",
+            v
+        );
     }
 }
