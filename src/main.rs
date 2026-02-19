@@ -4,6 +4,7 @@ mod json;
 mod lexer;
 mod parser;
 mod token;
+mod warnings;
 
 use std::env;
 use std::fs;
@@ -101,6 +102,12 @@ fn run() {
         test_count,
         if has_entry { "yes" } else { "no" }
     );
+
+    // Check for :any type usage and emit warnings to stderr
+    let any_warnings = warnings::check_any_warnings(&program);
+    for w in &any_warnings {
+        eprintln!("{}", w);
+    }
 
     if run_tests_only {
         eprintln!("running tests...");
