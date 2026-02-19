@@ -1780,6 +1780,40 @@ impl Interpreter {
                 let new_val = &args[args.len() - 1];
                 Some(crate::json::json_set(data, path, new_val)?)
             }
+            // HTTP builtins
+            "http_get" => {
+                let url = self.expect_text(&args[0])?;
+                match ureq::get(url).call() {
+                    Ok(response) => {
+                        match response.into_body().read_to_string() {
+                            Ok(body) => Some(Value::Text(body)),
+                            Err(e) => Some(Value::Err(format!("http_get read error: {}", e))),
+                        }
+                    }
+                    Err(e) => Some(Value::Err(format!("http_get error: {}", e))),
+                }
+            }
+            "http_post" => {
+                let url = self.expect_text(&args[0])?;
+                let body = self.expect_text(&args[1])?;
+                let content_type = if args.len() >= 3 {
+                    self.expect_text(&args[2])?
+                } else {
+                    "application/json"
+                };
+                match ureq::post(url)
+                    .header("Content-Type", content_type)
+                    .send(body.as_bytes())
+                {
+                    Ok(response) => {
+                        match response.into_body().read_to_string() {
+                            Ok(resp_body) => Some(Value::Text(resp_body)),
+                            Err(e) => Some(Value::Err(format!("http_post read error: {}", e))),
+                        }
+                    }
+                    Err(e) => Some(Value::Err(format!("http_post error: {}", e))),
+                }
+            }
             _ => None,
         };
         Ok(result)
@@ -3142,5 +3176,48 @@ mod tests {
             "#entry\n  v0 :any = call jparse \"{\\\"users\\\": [{\\\"name\\\": \\\"Alice\\\"}, {\\\"name\\\": \\\"Bob\\\"}]}\"\n  v1 :any = call jset v0 \"users\" 0 \"name\" \"Charlie\"\n  = call jget v1 \"users\" 0 \"name\"",
         );
         assert!(matches!(v, Value::Text(ref s) if s == "Charlie"), "expected 'Charlie', got: {:?}", v);
+    }
+
+    // -------------------------------------------------------
+    // HTTP builtins: http_get, http_post
+    // -------------------------------------------------------
+
+    #[test]
+    fn test_http_get_invalid_url() {
+        // http_get with an invalid URL should return Value::Err, not a RuntimeError
+        let v = run_program(
+            "#entry\n  = call http_get \"http://invalid.localhost.test\"",
+        );
+        assert!(
+            matches!(v, Value::Err(_)),
+            "expected Value::Err for invalid URL, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_http_post_invalid_url() {
+        // http_post with an invalid URL should return Value::Err, not a RuntimeError
+        let v = run_program(
+            "#entry\n  = call http_post \"http://invalid.localhost.test\" \"{}\"",
+        );
+        assert!(
+            matches!(v, Value::Err(_)),
+            "expected Value::Err for invalid URL, got: {:?}",
+            v
+        );
+    }
+
+    #[test]
+    fn test_http_get_is_recognized() {
+        // Verify http_get is a recognized builtin (returns Some, not None)
+        let interp = Interpreter::new();
+        let args = vec![Value::Text("http://invalid.localhost.test".to_string())];
+        let result = interp.try_builtin("http_get", &args);
+        match result {
+            Ok(Some(_)) => {} // recognized and returned a value (likely an Err value)
+            Ok(None) => panic!("http_get should be a recognized builtin, got None"),
+            Err(_) => {} // recognized but threw an error (still recognized)
+        }
     }
 }
