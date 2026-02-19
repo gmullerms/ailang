@@ -37,12 +37,20 @@ const BANNER: &str = r#"
 fn run() {
     let args: Vec<String> = env::args().collect();
 
-    // Parse flags: --sandbox, --verbose / -v
+    // Parse flags: --help / -h, --version, --sandbox, --verbose / -v
     let mut sandboxed = false;
     let mut verbose = false;
     let mut positional: Vec<&String> = Vec::new();
     for arg in &args[1..] {
         match arg.as_str() {
+            "--help" | "-h" => {
+                print_help();
+                return;
+            }
+            "--version" => {
+                println!("ailang {}", VERSION);
+                return;
+            }
             "--sandbox" => sandboxed = true,
             "--verbose" | "-v" => verbose = true,
             _ => positional.push(arg),
@@ -160,6 +168,32 @@ fn run() {
             process::exit(1);
         }
     }
+}
+
+fn print_help() {
+    println!("AILang v{}", VERSION);
+    println!("A programming language designed for AI agents.");
+    println!();
+    println!("USAGE:");
+    println!("  ailang [FLAGS] <file.ai>           Run a program");
+    println!("  ailang [FLAGS] test <file.ai>      Run tests only (#test blocks)");
+    println!("  ailang fmt <file.ai>               Format file in canonical form");
+    println!("  ailang inspect <library>            List exported symbols from a shared library");
+    println!("  ailang                              Launch interactive REPL");
+    println!();
+    println!("FLAGS:");
+    println!("  --sandbox       Restrict file, env, network, and FFI operations");
+    println!("  --verbose, -v   Trace execution to stderr");
+    println!("  --help, -h      Show this help message");
+    println!("  --version       Show version");
+    println!();
+    println!("EXAMPLES:");
+    println!("  ailang examples/hello.ai");
+    println!("  ailang test examples/hello.ai");
+    println!("  ailang --sandbox examples/hello.ai");
+    println!("  ailang -v test examples/hello.ai");
+    println!("  ailang fmt examples/hello.ai");
+    println!("  ailang inspect mylib.dll");
 }
 
 fn run_fmt(file_path: &str) {
