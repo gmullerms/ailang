@@ -232,3 +232,51 @@ fn test_fmt_ssa_renaming() {
     // Clean up
     let _ = fs::remove_file(tmp);
 }
+
+// --- :any type warning tests ---
+
+#[test]
+fn test_any_warn_demo() {
+    // The demo uses :any types but tests should still pass (warnings are informational)
+    run_ai_test("examples/any_warn_demo.ai");
+}
+
+#[test]
+fn test_any_warn_output() {
+    // Verify that :any type warnings appear on stderr
+    let output = Command::new("cargo")
+        .args(["run", "--", "test", "examples/any_warn_demo.ai"])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to execute cargo run: {}", e));
+
+    assert!(output.status.success(), "any_warn_demo should still pass");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    // Check that warnings are emitted for the various :any usages
+    assert!(
+        stderr.contains("warning: use of :any type in function 'process_data' return type"),
+        "should warn about process_data return type"
+    );
+    assert!(
+        stderr.contains("warning: use of :any type in parameter 'x' of function 'process_data'"),
+        "should warn about parameter x"
+    );
+    assert!(
+        stderr.contains("warning: use of :any type in bind 'v0' in function 'process_data'"),
+        "should warn about bind v0"
+    );
+    assert!(
+        stderr.contains("warning: use of :any type in const 'ANYTHING'"),
+        "should warn about const ANYTHING"
+    );
+    // list_any uses :[any] — nested any in a list type
+    assert!(
+        stderr.contains("warning: use of :any type in function 'list_any' return type"),
+        "should warn about list_any return type with nested any"
+    );
+    assert!(
+        stderr.contains("warning: use of :any type in parameter 'items' of function 'list_any'"),
+        "should warn about list_any parameter with nested any"
+    );
+}
