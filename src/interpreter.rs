@@ -166,6 +166,68 @@ impl Interpreter {
         }
     }
 
+    /// Register declarations from a program fragment into the interpreter.
+    /// Used by the REPL to accumulate function/type/const definitions across inputs.
+    pub fn register_program(&mut self, program: Program, env: &mut Env) -> Result<(), RuntimeError> {
+        for c in &program.consts {
+            let val = self.eval_expr(&c.value, &Env::new())?;
+            self.constants.insert(c.name.clone(), val.clone());
+            env.set(c.name.clone(), val);
+        }
+
+        for t in program.types {
+            self.type_defs.insert(t.name.clone(), t);
+        }
+
+        for f in program.functions {
+            self.functions.insert(f.name.clone(), f);
+        }
+
+        for eh in program.error_handlers {
+            self.error_handlers.insert(eh.fn_name.clone(), eh);
+        }
+
+        // Run tests if any
+        for test in &program.tests {
+            self.run_test(test)?;
+        }
+
+        // Run entry block if present
+        if let Some(entry) = &program.entry {
+            // Add constants to env
+            for (name, val) in &self.constants {
+                if env.get(name).is_none() {
+                    env.set(name.clone(), val.clone());
+                }
+            }
+            self.exec_body(&entry.body, env)?;
+        }
+
+        Ok(())
+    }
+
+    /// Evaluate a single statement in the given environment.
+    /// Used by the REPL for evaluating individual lines.
+    pub fn eval_stmt(&self, stmt: &Stmt, env: &mut Env) -> Result<Value, RuntimeError> {
+        match stmt {
+            Stmt::Bind { name, value, .. } => {
+                let val = self.eval_expr(value, env)?;
+                env.set(name.clone(), val);
+                Ok(Value::Void)
+            }
+            Stmt::Return { value } => self.eval_expr(value, env),
+            Stmt::Emit { value } => {
+                let val = self.eval_expr(value, env)?;
+                println!("{}", val);
+                Ok(val)
+            }
+            Stmt::Effect { expr } => {
+                let val = self.eval_expr(expr, env)?;
+                Ok(val)
+            }
+        }
+    }
+
     pub fn run(&mut self, program: Program, test_only: bool) -> Result<Value, RuntimeError> {
         // Register all declarations
         for c in &program.consts {
