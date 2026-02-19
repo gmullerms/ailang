@@ -1,0 +1,53 @@
+-- std/list.ai — Common list utilities for AILang
+
+-- Sum all integers in a list
+#fn sum :i32 lst:[i32]
+  = fold lst 0 (fn a:i32 b:i32 => + a b)
+
+-- Product of all integers in a list
+#fn product :i32 lst:[i32]
+  = fold lst 1 (fn a:i32 b:i32 => * a b)
+
+-- Check if any element is truthy
+#fn any :bool lst:[bool]
+  = fold lst false (fn a:bool b:bool => or a b)
+
+-- Check if all elements are truthy
+#fn all :bool lst:[bool]
+  = fold lst true (fn a:bool b:bool => and a b)
+
+-- Count elements in a list that satisfy a predicate
+#fn count_if :i32 lst:[any] pred:(any -> bool)
+  v0 :[any] = filter pred lst
+  = call len v0
+
+-- Private helper
+#fn _list_debug :void x:any
+  log "debug" "list item: {0}" x
+
+#test sum_works
+  v0 :[i32] = [1 2 3 4 5]
+  v1 :i32 = call sum v0
+  assert == v1 15
+
+#test sum_empty
+  v0 :[i32] = []
+  v1 :i32 = call sum v0
+  assert == v1 0
+
+#test product_works
+  v0 :[i32] = [1 2 3 4 5]
+  v1 :i32 = call product v0
+  assert == v1 120
+
+#test any_works
+  v0 :[bool] = [false false true false]
+  assert == (call any v0) true
+  v1 :[bool] = [false false false]
+  assert == (call any v1) false
+
+#test all_works
+  v0 :[bool] = [true true true]
+  assert == (call all v0) true
+  v1 :[bool] = [true false true]
+  assert == (call all v1) false

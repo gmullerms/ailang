@@ -1,0 +1,5 @@
+-- Test: importing a private function (prefixed with _) should fail
+#use "math_helpers" {_secret_formula}
+
+#test should_not_reach
+  assert true

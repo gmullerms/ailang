@@ -1,0 +1,37 @@
+-- math_helpers.ai — Helper module for the modules demo
+
+-- Public: double a number
+#fn double :i32 x:i32
+  = * x 2
+
+-- Public: triple a number
+#fn triple :i32 x:i32
+  = * x 3
+
+-- Public: check if a number is even
+#fn is_even :bool x:i32
+  = == (% x 2) 0
+
+-- Public: square a number
+#fn square :i32 x:i32
+  = * x x
+
+-- Public constant
+#const MAX_VALUE :i32 = 1000
+
+-- Private: internal implementation detail (cannot be imported)
+#fn _secret_formula :i32 x:i32
+  = + (* x 42) 7
+
+-- Private constant
+#const _INTERNAL_SEED :i32 = 12345
+
+#test double_works
+  assert == (call double 5) 10
+
+#test triple_works
+  assert == (call triple 4) 12
+
+#test is_even_works
+  assert == (call is_even 4) true
+  assert == (call is_even 7) false
