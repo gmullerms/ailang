@@ -96,12 +96,12 @@
 
 ### I/O & Files
 - [x] `read_file` / `write_file` builtins for file I/O
-- [ ] `http_get` / `http_post` for basic HTTP (useful for agent tasks)
+- [x] `http_get` / `http_post` for basic HTTP via `ureq` (3 tests + `19_http_demo.ai`)
 - [x] `env_get` — read environment variables
 - [x] Add 4 I/O tests + example (`14_file_io_demo.ai`)
 
 ### Sandboxed Execution Mode
-- [ ] `--sandbox` flag that restricts I/O (no file, network, or FFI access)
+- [x] `--sandbox` flag that restricts I/O (blocks read_file, write_file, env_get, http_get, http_post)
 - [ ] Whitelist-based permission model for agent safety
 - [ ] Sandboxed mode for FFI (restrict which libraries can be loaded)
 
@@ -113,8 +113,8 @@
 ### Developer Experience
 - [x] REPL mode: `ailang` with no args launches interactive prompt (ASCII banner, multi-line blocks, persistent env)
 - [x] Better runtime errors: show call stack / function name chain (added `in 'funcname':` wrapping)
-- [ ] `--verbose` flag to trace execution (print each statement as it runs)
-- [ ] Syntax highlighting files (VS Code `.tmLanguage`, tree-sitter grammar)
+- [x] `--verbose` / `-v` flag to trace execution (function calls, binds, tests, modules)
+- [x] Syntax highlighting: VS Code extension (`editors/vscode/ailang/`) with tmLanguage grammar
 - [ ] Restrict overuse of `any` type — emit warnings when `any` is used outside FFI/interop
 
 ---

@@ -106,6 +106,13 @@ fn test_18_json_demo() {
     run_ai_test("examples/18_json_demo.ai");
 }
 
+// --- HTTP tests ---
+
+#[test]
+fn test_19_http_demo() {
+    run_ai_test("examples/19_http_demo.ai");
+}
+
 // --- Module system tests ---
 
 #[test]
