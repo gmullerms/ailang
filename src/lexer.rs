@@ -216,6 +216,7 @@ impl Lexer {
             "entry" => TokenKind::Entry,
             "test" => TokenKind::Test,
             "err" => TokenKind::Err,
+            "extern" => TokenKind::Extern,
             _ => return Err(LexError {
                 message: format!("unknown sigil '#{}'", word),
                 line,

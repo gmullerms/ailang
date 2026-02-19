@@ -280,3 +280,43 @@ fn test_any_warn_output() {
         "should warn about list_any parameter with nested any"
     );
 }
+
+// --- FFI tests ---
+
+#[test]
+fn test_20_ffi_demo() {
+    // Build the FFI test library first
+    let build_output = Command::new("cargo")
+        .args(["build", "--manifest-path", "tests/ffi_test_lib/Cargo.toml"])
+        .output()
+        .expect("failed to build ffi_test_lib");
+    assert!(
+        build_output.status.success(),
+        "ffi_test_lib build failed:\n{}",
+        String::from_utf8_lossy(&build_output.stderr)
+    );
+
+    // Now run the FFI demo tests
+    run_ai_test("examples/20_ffi_demo.ai");
+}
+
+#[test]
+fn test_ffi_sandbox_blocked() {
+    // FFI should be blocked in sandbox mode
+    let output = Command::new("cargo")
+        .args(["run", "--", "--sandbox", "examples/20_ffi_demo.ai"])
+        .output()
+        .expect("failed to execute cargo run");
+
+    assert!(
+        !output.status.success(),
+        "FFI should fail in sandbox mode"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("sandbox: FFI library loading not permitted"),
+        "should mention sandbox FFI restriction, got:\n{}",
+        stderr
+    );
+}

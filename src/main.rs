@@ -1,4 +1,5 @@
 mod ast;
+mod ffi;
 mod formatter;
 mod interpreter;
 mod json;
@@ -105,11 +106,13 @@ fn run() {
 
     let fn_count = program.functions.len();
     let test_count = program.tests.len();
+    let extern_count: usize = program.externs.iter().map(|e| e.functions.len()).sum();
     let has_entry = program.entry.is_some();
 
     eprintln!(
-        "  parsed: {} fn | {} test | entry: {}",
+        "  parsed: {} fn | {} extern | {} test | entry: {}",
         fn_count,
+        extern_count,
         test_count,
         if has_entry { "yes" } else { "no" }
     );

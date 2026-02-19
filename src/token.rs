@@ -12,6 +12,7 @@ pub enum TokenKind {
     Entry,    // #entry
     Test,     // #test
     Err,      // #err
+    Extern,   // #extern
 
     // Keywords
     Call,     // call

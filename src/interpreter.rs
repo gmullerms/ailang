@@ -3,6 +3,7 @@
 /// Immutable environments with scope chaining.
 
 use crate::ast::*;
+use crate::ffi;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -164,6 +165,10 @@ pub struct Interpreter {
     pub sandboxed: bool,
     /// When true, print trace information to stderr for each key operation
     pub verbose: bool,
+    /// FFI manager for loading shared libraries
+    pub ffi: ffi::FfiManager,
+    /// Extern function declarations: fn_name -> (lib_name, return_type, params)
+    extern_fns: HashMap<String, (String, AiType, Vec<Param>)>,
 }
 
 impl Interpreter {
@@ -187,6 +192,8 @@ impl Interpreter {
             std_dir,
             sandboxed: false,
             verbose: false,
+            ffi: ffi::FfiManager::new(),
+            extern_fns: HashMap::new(),
         }
     }
 
@@ -295,6 +302,37 @@ impl Interpreter {
 
             for use_decl in &program.uses {
                 self.load_module(&use_decl.path, &use_decl.names, &base_dir, use_decl.line)?;
+            }
+        }
+
+        // Process #extern blocks
+        if !program.externs.is_empty() {
+            if self.sandboxed {
+                return Err(RuntimeError {
+                    message: "sandbox: FFI library loading not permitted".to_string(),
+                });
+            }
+
+            let search_dir = source_path
+                .and_then(|p| p.parent())
+                .map(|p| p.to_path_buf());
+
+            for ext_block in &program.externs {
+                self.ffi.load_library(
+                    &ext_block.lib_name,
+                    search_dir.as_deref(),
+                ).map_err(|e| RuntimeError { message: e })?;
+
+                for ext_fn in &ext_block.functions {
+                    self.extern_fns.insert(
+                        ext_fn.name.clone(),
+                        (
+                            ext_block.lib_name.clone(),
+                            ext_fn.return_type.clone(),
+                            ext_fn.params.clone(),
+                        ),
+                    );
+                }
             }
         }
 
@@ -611,8 +649,8 @@ impl Interpreter {
                 .get(name)
                 .cloned()
                 .or_else(|| {
-                    // Check if it's a function reference
-                    if self.functions.contains_key(name) {
+                    // Check if it's a function reference (user-defined or extern)
+                    if self.functions.contains_key(name) || self.extern_fns.contains_key(name) {
                         Some(Value::FnRef(name.clone()))
                     } else {
                         self.constants.get(name).cloned()
@@ -1138,12 +1176,36 @@ impl Interpreter {
         name: &str,
         args: &[Value],
     ) -> Result<Value, RuntimeError> {
+        // Check if it's an extern (FFI) function first
+        if let Some((lib_name, return_type, params)) = self.extern_fns.get(name) {
+            let param_types: Vec<AiType> = params.iter().map(|p| p.ty.clone()).collect();
+            return self.ffi.call_function(
+                lib_name,
+                name,
+                args,
+                &param_types,
+                return_type,
+            ).map_err(|e| RuntimeError { message: e });
+        }
+
         // Trampoline loop for tail-call optimization
         let mut current_name = name.to_string();
         let mut current_args = args.to_vec();
         let original_name = name.to_string();
 
         loop {
+            // Check if the current target is an extern function (for tail call chains)
+            if let Some((lib_name, return_type, params)) = self.extern_fns.get(&current_name) {
+                let param_types: Vec<AiType> = params.iter().map(|p| p.ty.clone()).collect();
+                return self.ffi.call_function(
+                    lib_name,
+                    &current_name,
+                    &current_args,
+                    &param_types,
+                    return_type,
+                ).map_err(|e| RuntimeError { message: e });
+            }
+
             // Look up user-defined function
             let func = self.functions.get(&current_name).ok_or_else(|| RuntimeError {
                 message: format!("undefined function '{}'", current_name),
