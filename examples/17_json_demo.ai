@@ -1,0 +1,125 @@
+-- JSON Operations Demo
+-- Demonstrates: jparse, jstr, jget, jset
+
+-- jparse: parse JSON text into AILang values
+
+#test jparse_object
+  v0 :any = call jparse "{\"name\": \"AI\", \"version\": 3}"
+  v1 :text = call jget v0 "name"
+  assert == v1 "AI"
+  v2 :i32 = call jget v0 "version"
+  assert == v2 3
+
+#test jparse_array
+  v0 :any = call jparse "[10, 20, 30]"
+  assert == (call len v0) 3
+  assert == (call jget v0 0) 10
+  assert == (call jget v0 1) 20
+  assert == (call jget v0 2) 30
+
+#test jparse_primitives
+  assert == (call jparse "42") 42
+  assert == (call jparse "\"hello\"") "hello"
+  assert == (call jparse "true") true
+  assert == (call jparse "false") false
+  assert == (call jparse "null") null
+
+#test jparse_nested
+  v0 :any = call jparse "{\"users\": [{\"name\": \"Alice\", \"age\": 30}, {\"name\": \"Bob\", \"age\": 25}]}"
+  v1 :text = call jget v0 "users" 0 "name"
+  assert == v1 "Alice"
+  v2 :i32 = call jget v0 "users" 1 "age"
+  assert == v2 25
+
+-- jstr: serialize AILang values to JSON text
+
+#test jstr_primitives
+  assert == (call jstr 42) "42"
+  assert == (call jstr "hello") "\"hello\""
+  assert == (call jstr true) "true"
+  assert == (call jstr false) "false"
+  assert == (call jstr null) "null"
+
+#test jstr_array
+  v0 :text = call jstr [1 2 3]
+  assert == v0 "[1,2,3]"
+
+#test jstr_roundtrip
+  v0 :text = "{\"name\":\"AI\",\"version\":3}"
+  v1 :any = call jparse v0
+  v2 :text = call jstr v1
+  v3 :any = call jparse v2
+  assert == (call jget v3 "name") "AI"
+  assert == (call jget v3 "version") 3
+
+-- jget: navigate nested structures
+
+#test jget_map
+  v0 :any = call jparse "{\"a\": 1, \"b\": 2, \"c\": 3}"
+  assert == (call jget v0 "a") 1
+  assert == (call jget v0 "b") 2
+  assert == (call jget v0 "c") 3
+
+#test jget_list
+  v0 :any = call jparse "[100, 200, 300]"
+  assert == (call jget v0 0) 100
+  assert == (call jget v0 2) 300
+
+#test jget_deep_path
+  v0 :any = call jparse "{\"config\": {\"db\": {\"host\": \"localhost\", \"port\": 5432}}}"
+  assert == (call jget v0 "config" "db" "host") "localhost"
+  assert == (call jget v0 "config" "db" "port") 5432
+
+#test jget_missing_returns_null
+  v0 :any = call jparse "{\"a\": 1}"
+  assert == (call jget v0 "missing") null
+  assert == (call jget v0 "a" "nested") null
+
+-- jset: immutable update at path
+
+#test jset_simple_key
+  v0 :any = call jparse "{\"name\": \"old\"}"
+  v1 :any = call jset v0 "name" "new"
+  assert == (call jget v1 "name") "new"
+  assert == (call jget v0 "name") "old"
+
+#test jset_add_key
+  v0 :any = call jparse "{\"a\": 1}"
+  v1 :any = call jset v0 "b" 2
+  assert == (call jget v1 "a") 1
+  assert == (call jget v1 "b") 2
+
+#test jset_nested_path
+  v0 :any = call jparse "{\"users\": [{\"name\": \"Alice\"}, {\"name\": \"Bob\"}]}"
+  v1 :any = call jset v0 "users" 1 "name" "Charlie"
+  assert == (call jget v1 "users" 1 "name") "Charlie"
+  assert == (call jget v1 "users" 0 "name") "Alice"
+
+#test jset_list_element
+  v0 :any = call jparse "[1, 2, 3]"
+  v1 :any = call jset v0 1 99
+  assert == (call jget v1 0) 1
+  assert == (call jget v1 1) 99
+  assert == (call jget v1 2) 3
+
+-- Full workflow: parse, navigate, modify, serialize
+
+#fn json_workflow :text
+  v0 :any = call jparse "{\"status\": \"ok\", \"data\": {\"items\": [{\"id\": 1, \"name\": \"Widget\"}, {\"id\": 2, \"name\": \"Gadget\"}]}}"
+  v1 :text = call jget v0 "data" "items" 0 "name"
+  log "info" "First item: {0}" v1
+  v2 :any = call jset v0 "data" "items" 1 "name" "SuperGadget"
+  v3 :text = call jget v2 "data" "items" 1 "name"
+  log "info" "Updated item: {0}" v3
+  v4 :text = call jstr v2
+  log "info" "Serialized: {0}" v4
+  = v3
+
+#test workflow
+  v0 :text = call json_workflow
+  assert == v0 "SuperGadget"
+
+#entry
+  log "info" "JSON Operations Demo"
+  v0 :text = call json_workflow
+  > call fmt "Result: {0}" v0

@@ -1368,6 +1368,38 @@ impl Interpreter {
                 let msg = self.expect_text(&args[0])?;
                 Some(Value::Err(msg.to_string()))
             }
+            // JSON builtins
+            "jparse" => {
+                let text = self.expect_text(&args[0])?;
+                Some(crate::json::json_parse(text)?)
+            }
+            "jstr" => {
+                Some(Value::Text(crate::json::json_stringify(&args[0])?))
+            }
+            "jget" => {
+                // jget data path_component1 path_component2 ...
+                if args.is_empty() {
+                    return Err(RuntimeError {
+                        message: "jget requires at least 1 argument".to_string(),
+                    });
+                }
+                let data = &args[0];
+                let path = &args[1..];
+                Some(crate::json::json_get(data, path))
+            }
+            "jset" => {
+                // jset data path1 path2 ... new_value
+                // Minimum 3 args: data, one path component, value
+                if args.len() < 3 {
+                    return Err(RuntimeError {
+                        message: "jset requires at least 3 arguments (data, path, value)".to_string(),
+                    });
+                }
+                let data = &args[0];
+                let path = &args[1..args.len() - 1];
+                let new_val = &args[args.len() - 1];
+                Some(crate::json::json_set(data, path, new_val)?)
+            }
             _ => None,
         };
         Ok(result)
@@ -2401,5 +2433,175 @@ mod tests {
             "#fn inner :i32\n  = error \"inner_fail\"\n\n#fn outer :i32\n  v0 :i32 = (call inner)?\n  = + v0 1\n\n#err outer\n  fallback 0\n\n#entry\n  = call outer",
         );
         assert!(matches!(v, Value::Int(0)), "expected 0, got: {:?}", v);
+    }
+
+    // -------------------------------------------------------
+    // JSON builtins: jparse, jstr, jget, jset
+    // -------------------------------------------------------
+
+    #[test]
+    fn test_jparse_object() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"name\\\": \\\"AI\\\", \\\"age\\\": 3}\"\n  = v0",
+        );
+        if let Value::Map(pairs) = &v {
+            assert_eq!(pairs.len(), 2);
+            // Check name key
+            let name_val = pairs.iter().find(|(k, _)| matches!(k, Value::Text(s) if s == "name"));
+            assert!(name_val.is_some(), "expected 'name' key in map");
+            assert!(matches!(name_val.unwrap().1, Value::Text(ref s) if s == "AI"));
+            // Check age key
+            let age_val = pairs.iter().find(|(k, _)| matches!(k, Value::Text(s) if s == "age"));
+            assert!(age_val.is_some(), "expected 'age' key in map");
+            assert!(matches!(age_val.unwrap().1, Value::Int(3)));
+        } else {
+            panic!("expected Map, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_jparse_array() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"[1, 2, 3]\"\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 3);
+            assert!(matches!(items[0], Value::Int(1)));
+            assert!(matches!(items[1], Value::Int(2)));
+            assert!(matches!(items[2], Value::Int(3)));
+        } else {
+            panic!("expected List, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_jparse_nested() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"users\\\": [{\\\"name\\\": \\\"Alice\\\"}, {\\\"name\\\": \\\"Bob\\\"}]}\"\n  = v0",
+        );
+        if let Value::Map(pairs) = &v {
+            assert_eq!(pairs.len(), 1);
+            if let Value::List(users) = &pairs[0].1 {
+                assert_eq!(users.len(), 2);
+                if let Value::Map(user0) = &users[0] {
+                    assert!(matches!(&user0[0].1, Value::Text(s) if s == "Alice"));
+                } else {
+                    panic!("expected inner map");
+                }
+            } else {
+                panic!("expected inner list");
+            }
+        } else {
+            panic!("expected Map, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_jparse_primitives() {
+        // string
+        let v = run_program("#entry\n  = call jparse \"\\\"hello\\\"\"");
+        assert!(matches!(v, Value::Text(ref s) if s == "hello"));
+
+        // number
+        let v = run_program("#entry\n  = call jparse \"42\"");
+        assert!(matches!(v, Value::Int(42)));
+
+        // boolean true
+        let v = run_program("#entry\n  = call jparse \"true\"");
+        assert!(matches!(v, Value::Bool(true)));
+
+        // boolean false
+        let v = run_program("#entry\n  = call jparse \"false\"");
+        assert!(matches!(v, Value::Bool(false)));
+
+        // null
+        let v = run_program("#entry\n  = call jparse \"null\"");
+        assert!(matches!(v, Value::Null));
+    }
+
+    #[test]
+    fn test_jparse_invalid() {
+        let e = run_program_err("#entry\n  = call jparse \"{invalid}\"");
+        assert!(e.message.contains("JSON parse error"), "expected JSON parse error, got: {}", e.message);
+    }
+
+    #[test]
+    fn test_jstr_object() {
+        let v = run_program(
+            "#entry\n  v0 :any = {\"name\" \"AI\"}\n  = call jstr v0",
+        );
+        if let Value::Text(s) = &v {
+            assert!(s.contains("\"name\""), "expected key 'name' in: {}", s);
+            assert!(s.contains("\"AI\""), "expected value 'AI' in: {}", s);
+        } else {
+            panic!("expected Text, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_jstr_array() {
+        let v = run_program(
+            "#entry\n  v0 :any = [1 2 3]\n  = call jstr v0",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "[1,2,3]"));
+    }
+
+    #[test]
+    fn test_jstr_primitives() {
+        // number
+        let v = run_program("#entry\n  = call jstr 42");
+        assert!(matches!(v, Value::Text(ref s) if s == "42"));
+
+        // string
+        let v = run_program("#entry\n  = call jstr \"hello\"");
+        assert!(matches!(v, Value::Text(ref s) if s == "\"hello\""));
+
+        // boolean
+        let v = run_program("#entry\n  = call jstr true");
+        assert!(matches!(v, Value::Text(ref s) if s == "true"));
+
+        // null
+        let v = run_program("#entry\n  = call jstr null");
+        assert!(matches!(v, Value::Text(ref s) if s == "null"));
+    }
+
+    #[test]
+    fn test_jget_simple() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"name\\\": \\\"AI\\\", \\\"age\\\": 3}\"\n  = call jget v0 \"name\"",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "AI"), "expected 'AI', got: {:?}", v);
+    }
+
+    #[test]
+    fn test_jget_nested() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"users\\\": [{\\\"name\\\": \\\"Alice\\\"}, {\\\"name\\\": \\\"Bob\\\"}]}\"\n  = call jget v0 \"users\" 1 \"name\"",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "Bob"), "expected 'Bob', got: {:?}", v);
+    }
+
+    #[test]
+    fn test_jget_missing() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"name\\\": \\\"AI\\\"}\"\n  = call jget v0 \"missing\"",
+        );
+        assert!(matches!(v, Value::Null), "expected Null, got: {:?}", v);
+    }
+
+    #[test]
+    fn test_jset_simple() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"name\\\": \\\"AI\\\"}\"\n  v1 :any = call jset v0 \"name\" \"Bot\"\n  = call jget v1 \"name\"",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "Bot"), "expected 'Bot', got: {:?}", v);
+    }
+
+    #[test]
+    fn test_jset_nested() {
+        let v = run_program(
+            "#entry\n  v0 :any = call jparse \"{\\\"users\\\": [{\\\"name\\\": \\\"Alice\\\"}, {\\\"name\\\": \\\"Bob\\\"}]}\"\n  v1 :any = call jset v0 \"users\" 0 \"name\" \"Charlie\"\n  = call jget v1 \"users\" 0 \"name\"",
+        );
+        assert!(matches!(v, Value::Text(ref s) if s == "Charlie"), "expected 'Charlie', got: {:?}", v);
     }
 }
