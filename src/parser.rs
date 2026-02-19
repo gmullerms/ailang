@@ -61,7 +61,7 @@ impl Parser {
     fn parse_use(&mut self) -> Result<UseDecl, ParseError> {
         let line = self.peek().line;
         self.expect(TokenKind::Use)?;
-        let path = self.expect_ident()?;
+        let path = self.expect_string_lit()?;
 
         let names = if self.check(&TokenKind::LBrace) {
             self.advance();
@@ -243,6 +243,11 @@ impl Parser {
 
         while self.check(&TokenKind::Indent) {
             self.advance(); // consume indent
+            // Skip blank/comment-only indented lines
+            if matches!(self.peek().kind, TokenKind::Newline | TokenKind::Eof) {
+                self.skip_newlines();
+                continue;
+            }
             stmts.push(self.parse_stmt()?);
             self.expect_newline_or_eof()?;
         }
@@ -997,6 +1002,17 @@ impl Parser {
                 Ok(name)
             }
             _ => Err(self.error(&format!("expected identifier, got {:?}", self.peek().kind))),
+        }
+    }
+
+    fn expect_string_lit(&mut self) -> Result<String, ParseError> {
+        match &self.peek().kind {
+            TokenKind::TextLit(s) => {
+                let s = s.clone();
+                self.advance();
+                Ok(s)
+            }
+            _ => Err(self.error(&format!("expected string literal, got {:?}", self.peek().kind))),
         }
     }
 

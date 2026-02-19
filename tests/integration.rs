@@ -20,6 +20,20 @@ fn run_ai_test(file: &str) {
     );
 }
 
+/// Helper: run `cargo run -- test <file>` and assert failure (non-zero exit)
+fn run_ai_test_expect_fail(file: &str) {
+    let output = Command::new("cargo")
+        .args(["run", "--", "test", file])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to execute cargo run for {}: {}", file, e));
+
+    assert!(
+        !output.status.success(),
+        "{} was expected to fail but succeeded",
+        file,
+    );
+}
+
 #[test]
 fn test_hello_ai() {
     run_ai_test("examples/hello.ai");
@@ -83,4 +97,38 @@ fn test_11_invert_binary_tree() {
 #[test]
 fn test_connect4() {
     run_ai_test("examples/connect4.ai");
+}
+
+// --- Module system tests ---
+
+#[test]
+fn test_17_modules_demo() {
+    run_ai_test("examples/17_modules_demo.ai");
+}
+
+#[test]
+fn test_std_math() {
+    run_ai_test("std/math.ai");
+}
+
+#[test]
+fn test_std_list() {
+    run_ai_test("std/list.ai");
+}
+
+#[test]
+fn test_math_helpers() {
+    run_ai_test("examples/math_helpers.ai");
+}
+
+#[test]
+fn test_module_not_found() {
+    // A file that imports a non-existent module should fail
+    run_ai_test_expect_fail("examples/test_module_not_found.ai");
+}
+
+#[test]
+fn test_private_import_rejected() {
+    // A file that tries to import a private function should fail
+    run_ai_test_expect_fail("examples/test_private_import.ai");
 }
