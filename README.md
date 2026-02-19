@@ -74,6 +74,13 @@ Both modes execute the `#test` blocks. In test mode, `#entry` is skipped so inte
 
 Launches the interactive REPL. Define functions with `#fn` (multi-line block), evaluate expressions inline. Type `exit` to quit.
 
+### Flags
+```
+./target/debug/ailang --sandbox examples/hello.ai    # Restrict file/env/network I/O
+./target/debug/ailang --verbose examples/hello.ai     # Trace execution to stderr
+./target/debug/ailang -v test examples/hello.ai       # Combine flags with test mode
+```
+
 ### Example output
 ```
 $ ./target/debug/ailang test examples/hello.ai
@@ -132,7 +139,10 @@ ailang/
     16_error_handling_demo.ai -- error, ?, #err handlers
     17_modules_demo.ai      -- #use imports, selective imports, privacy
     18_json_demo.ai         -- jparse, jstr, jget, jset
+    19_http_demo.ai         -- http_get, http_post with error handling
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
+  editors/
+    vscode/ailang/          -- VS Code syntax highlighting extension
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
   TODO.md           -- Prioritized roadmap (short/medium/long term)
@@ -250,17 +260,17 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `jparse`, `jstr`, `jget`, `jset`
 
 ### I/O
-`print`, `print_no_nl`, `read_line`, `log`, `read_file`, `write_file`, `env_get`
+`print`, `print_no_nl`, `read_line`, `log`, `read_file`, `write_file`, `env_get`, `http_get`, `http_post`
 
 ## Testing
 
-AILang has 182 tests: 162 unit tests (lexer, parser, interpreter) and 20 integration tests.
+AILang has 192 tests: 171 unit tests (lexer, parser, interpreter) and 21 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system tests.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system and HTTP tests.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
