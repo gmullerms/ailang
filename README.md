@@ -270,6 +270,24 @@ CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 - **[MANIFESTO.md](MANIFESTO.md)** — Why human programming languages are wrong for AI, with side-by-side comparisons
 - **[TODO.md](TODO.md)** — Prioritized roadmap: FFI, compiler backend, agent primitives
 
+## Editor Support
+
+### VS Code
+
+A syntax highlighting extension for `.ai` files is included at `editors/vscode/ailang/`.
+
+**Install locally:**
+1. Copy (or symlink) `editors/vscode/ailang/` into your VS Code extensions directory:
+   - **Windows:** `%USERPROFILE%\.vscode\extensions\ailang`
+   - **macOS/Linux:** `~/.vscode/extensions/ailang`
+2. Reload VS Code.
+
+The extension provides:
+- Syntax highlighting for all AILang constructs (sigils, keywords, operators, types, builtins, SSA variables, strings, numbers, comments, lambdas, pipelines)
+- Line comment toggling (`--`)
+- Bracket matching and auto-closing for `()`, `[]`, `{}`, and `""`
+- Auto-indentation after block sigils (`#fn`, `#entry`, `#test`, etc.)
+
 ## License
 
 MIT
