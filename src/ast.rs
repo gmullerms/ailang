@@ -6,6 +6,7 @@
 #[derive(Debug)]
 pub struct Program {
     pub uses: Vec<UseDecl>,
+    pub externs: Vec<ExternBlock>,
     pub types: Vec<TypeDecl>,
     pub enums: Vec<EnumDecl>,
     pub consts: Vec<ConstDecl>,
@@ -13,6 +14,23 @@ pub struct Program {
     pub tests: Vec<TestDecl>,
     pub error_handlers: Vec<ErrHandler>,
     pub entry: Option<EntryBlock>,
+}
+
+/// #extern "libname"
+///   fn_name :RetType param:Type param:Type
+#[derive(Debug)]
+pub struct ExternBlock {
+    pub lib_name: String,
+    pub functions: Vec<ExternFnDecl>,
+    pub line: usize,
+}
+
+#[derive(Debug)]
+pub struct ExternFnDecl {
+    pub name: String,
+    pub return_type: AiType,
+    pub params: Vec<Param>,
+    pub line: usize,
 }
 
 /// #use path {names}

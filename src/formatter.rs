@@ -24,37 +24,42 @@ pub fn format_program(program: &Program) -> String {
         blocks.push(format_use(u));
     }
 
-    // 2. #const declarations
+    // 2. #extern blocks
+    for ext in &program.externs {
+        blocks.push(format_extern(ext));
+    }
+
+    // 3. #const declarations
     for c in &program.consts {
         blocks.push(format_const(c));
     }
 
-    // 3. #type declarations
+    // 4. #type declarations
     for t in &program.types {
         blocks.push(format_type_decl(t));
     }
 
-    // 4. #enum declarations
+    // 5. #enum declarations
     for e in &program.enums {
         blocks.push(format_enum_decl(e));
     }
 
-    // 5. #fn declarations
+    // 6. #fn declarations
     for f in &program.functions {
         blocks.push(format_fn(f));
     }
 
-    // 6. #test blocks
+    // 7. #test blocks
     for t in &program.tests {
         blocks.push(format_test(t));
     }
 
-    // 7. #err handlers
+    // 8. #err handlers
     for e in &program.error_handlers {
         blocks.push(format_err_handler(e));
     }
 
-    // 8. #entry block (last)
+    // 9. #entry block (last)
     if let Some(entry) = &program.entry {
         blocks.push(format_entry(entry));
     }
@@ -81,6 +86,18 @@ fn format_use(u: &UseDecl) -> String {
         }
         None => format!("#use \"{}\"", escape_string(&u.path)),
     }
+}
+
+fn format_extern(ext: &ExternBlock) -> String {
+    let mut lines = vec![format!("#extern \"{}\"", escape_string(&ext.lib_name))];
+    for f in &ext.functions {
+        let mut sig = format!("  {} :{}", f.name, format_type(&f.return_type));
+        for p in &f.params {
+            sig.push_str(&format!(" {}:{}", p.name, format_type(&p.ty)));
+        }
+        lines.push(sig);
+    }
+    lines.join("\n")
 }
 
 fn format_const(c: &ConstDecl) -> String {

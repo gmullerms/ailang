@@ -48,7 +48,8 @@ impl Parser {
             | TokenKind::Use
             | TokenKind::Entry
             | TokenKind::Test
-            | TokenKind::Err => {
+            | TokenKind::Err
+            | TokenKind::Extern => {
                 let program = self.parse()?;
                 Ok(ReplInput::Block(program))
             }
@@ -90,6 +91,7 @@ impl Parser {
     pub fn parse(&mut self) -> Result<Program, ParseError> {
         let mut program = Program {
             uses: Vec::new(),
+            externs: Vec::new(),
             types: Vec::new(),
             enums: Vec::new(),
             consts: Vec::new(),
@@ -104,6 +106,7 @@ impl Parser {
         while !self.is_at_end() {
             match &self.peek().kind {
                 TokenKind::Use => program.uses.push(self.parse_use()?),
+                TokenKind::Extern => program.externs.push(self.parse_extern()?),
                 TokenKind::Type => program.types.push(self.parse_type_decl()?),
                 TokenKind::Enum => program.enums.push(self.parse_enum_decl()?),
                 TokenKind::Const => program.consts.push(self.parse_const()?),
@@ -149,6 +152,52 @@ impl Parser {
 
         self.expect_newline_or_eof()?;
         Ok(UseDecl { path, names, line })
+    }
+
+    fn parse_extern(&mut self) -> Result<ExternBlock, ParseError> {
+        let line = self.peek().line;
+        self.expect(TokenKind::Extern)?;
+        let lib_name = self.expect_string_lit()?;
+        self.expect_newline_or_eof()?;
+
+        let mut functions = Vec::new();
+        while self.check(&TokenKind::Indent) {
+            self.advance(); // consume indent
+            // Skip blank indented lines
+            if matches!(self.peek().kind, TokenKind::Newline | TokenKind::Eof) {
+                self.skip_newlines();
+                continue;
+            }
+            let fn_line = self.peek().line;
+            let name = self.expect_ident()?;
+            self.expect(TokenKind::Colon)?;
+            let return_type = self.parse_type()?;
+
+            let mut params = Vec::new();
+            while self.check_ident() {
+                let param_name = self.expect_ident()?;
+                self.expect(TokenKind::Colon)?;
+                let param_type = self.parse_type()?;
+                params.push(Param {
+                    name: param_name,
+                    ty: param_type,
+                });
+            }
+
+            functions.push(ExternFnDecl {
+                name,
+                return_type,
+                params,
+                line: fn_line,
+            });
+            self.expect_newline_or_eof()?;
+        }
+
+        Ok(ExternBlock {
+            lib_name,
+            functions,
+            line,
+        })
     }
 
     fn parse_type_decl(&mut self) -> Result<TypeDecl, ParseError> {

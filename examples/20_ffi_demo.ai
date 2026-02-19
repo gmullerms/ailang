@@ -1,0 +1,55 @@
+#extern "../tests/ffi_test_lib/target/debug/ffi_test_lib"
+  test_add :i32 a:i32 b:i32
+  test_negate :i32 x:i32
+  test_double_float :f64 x:f64
+  test_strlen :i32 s:text
+  test_add_floats :f64 a:f64 b:f64
+
+#test ffi_add
+  v0 :i32 = call test_add 3 4
+  assert == v0 7
+
+#test ffi_add_larger
+  v0 :i32 = call test_add 100 200
+  assert == v0 300
+
+#test ffi_negate
+  v0 :i32 = call test_negate 5
+  assert == v0 -5
+
+#test ffi_negate_zero
+  v0 :i32 = call test_negate 0
+  assert == v0 0
+
+#test ffi_double_float
+  v0 :f64 = call test_double_float 3.14
+  v1 :bool = > v0 6.27
+  v2 :bool = < v0 6.29
+  assert v1
+  assert v2
+
+#test ffi_strlen
+  v0 :i32 = call test_strlen "hello"
+  assert == v0 5
+
+#test ffi_strlen_empty
+  v0 :i32 = call test_strlen ""
+  assert == v0 0
+
+#test ffi_add_floats
+  v0 :f64 = call test_add_floats 1.5 2.5
+  v1 :bool = > v0 3.99
+  v2 :bool = < v0 4.01
+  assert v1
+  assert v2
+
+#entry
+  v0 :i32 = call test_add 10 20
+  log "info" "test_add(10, 20) = {0}" v0
+  v1 :i32 = call test_negate 42
+  log "info" "test_negate(42) = {0}" v1
+  v2 :f64 = call test_double_float 1.5
+  log "info" "test_double_float(1.5) = {0}" v2
+  v3 :i32 = call test_strlen "AILang FFI"
+  log "info" "test_strlen(\"AILang FFI\") = {0}" v3
+  = 0

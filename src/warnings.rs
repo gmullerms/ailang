@@ -54,6 +54,26 @@ pub fn check_any_warnings(program: &Program) -> Vec<String> {
         walk_body_for_any(&entry.body, "<entry>", entry.line, &mut warnings);
     }
 
+    // Check extern declarations
+    for ext in &program.externs {
+        for ext_fn in &ext.functions {
+            if contains_any(&ext_fn.return_type) {
+                warnings.push(format!(
+                    "warning: use of :any type in extern function '{}' return type (line {})",
+                    ext_fn.name, ext_fn.line
+                ));
+            }
+            for param in &ext_fn.params {
+                if contains_any(&param.ty) {
+                    warnings.push(format!(
+                        "warning: use of :any type in parameter '{}' of extern function '{}' (line {})",
+                        param.name, ext_fn.name, ext_fn.line
+                    ));
+                }
+            }
+        }
+    }
+
     // Check type declarations (field types)
     for td in &program.types {
         for field in &td.fields {
@@ -281,6 +301,7 @@ mod tests {
     fn empty_program() -> Program {
         Program {
             uses: vec![],
+            externs: vec![],
             types: vec![],
             enums: vec![],
             consts: vec![],
