@@ -1,0 +1,140 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "AILang",
+  "scopeName": "source.ailang",
+  "patterns": [
+    { "include": "#comment" },
+    { "include": "#string" },
+    { "include": "#sigil" },
+    { "include": "#return-statement" },
+    { "include": "#emit-statement" },
+    { "include": "#lambda" },
+    { "include": "#pipeline-operator" },
+    { "include": "#error-propagation" },
+    { "include": "#keyword-control" },
+    { "include": "#keyword-builtin" },
+    { "include": "#operator" },
+    { "include": "#type-annotation" },
+    { "include": "#constant-language" },
+    { "include": "#constant-numeric" },
+    { "include": "#support-function" },
+    { "include": "#ssa-variable" }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-dash.ailang",
+      "match": "--.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.ailang",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.ailang",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "sigil": {
+      "name": "keyword.control.ailang",
+      "match": "^#(fn|entry|test|err|use|const|type|enum)\\b"
+    },
+    "return-statement": {
+      "name": "keyword.control.return.ailang",
+      "match": "^\\s+=(?!=)"
+    },
+    "emit-statement": {
+      "name": "keyword.control.emit.ailang",
+      "match": "^\\s+>(?!=)"
+    },
+    "lambda": {
+      "patterns": [
+        {
+          "name": "keyword.other.lambda.ailang",
+          "match": "\\bfn\\b"
+        },
+        {
+          "name": "keyword.other.lambda.ailang",
+          "match": "=>"
+        }
+      ]
+    },
+    "pipeline-operator": {
+      "name": "keyword.operator.pipeline.ailang",
+      "match": "\\|>"
+    },
+    "error-propagation": {
+      "name": "keyword.operator.propagate.ailang",
+      "match": "\\)\\?"
+    },
+    "keyword-control": {
+      "name": "keyword.other.ailang",
+      "match": "\\b(select|cond|map|fold|filter|zip|flatmap|cast|match|call|assert|error|each|try|unwrap|ok|async|await|par|send|recv|tool|prompt|prompt_json|observe|store_get|store_set|store_del)\\b"
+    },
+    "keyword-builtin": {
+      "comment": "Logic and bitwise keyword operators",
+      "name": "keyword.operator.ailang",
+      "match": "\\b(and|or|not|band|bor|bxor|bnot|shl|shr)\\b"
+    },
+    "operator": {
+      "name": "keyword.operator.ailang",
+      "match": "(==|!=|<=|>=|&&|\\|\\||[+\\-*/%<>!])"
+    },
+    "type-annotation": {
+      "patterns": [
+        {
+          "comment": "List type annotations like :[i32], :![text]",
+          "name": "storage.type.ailang",
+          "match": ":[!?]?\\[[a-zA-Z0-9_\\[\\]{}:]+\\]"
+        },
+        {
+          "comment": "Map type annotations like :{text i32}, :{text:text}",
+          "name": "storage.type.ailang",
+          "match": ":[!?]?\\{[a-zA-Z0-9_\\s:]+\\}"
+        },
+        {
+          "comment": "Simple type annotations like :i32, :f64, :text, :bool, :any, :void, :!i32, :?text",
+          "name": "storage.type.ailang",
+          "match": ":[!?]?(i32|i64|f32|f64|bool|text|byte|void|any|chan)\\b"
+        },
+        {
+          "comment": "Custom/user type annotations like :Config, :Article, :Shape",
+          "name": "storage.type.ailang",
+          "match": ":[!?]?[A-Z][a-zA-Z0-9_]*\\b"
+        }
+      ]
+    },
+    "constant-language": {
+      "name": "constant.language.ailang",
+      "match": "\\b(true|false|null)\\b"
+    },
+    "constant-numeric": {
+      "patterns": [
+        {
+          "comment": "Hexadecimal integers",
+          "name": "constant.numeric.hex.ailang",
+          "match": "\\b0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "comment": "Floating-point numbers",
+          "name": "constant.numeric.float.ailang",
+          "match": "-?\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "comment": "Integers",
+          "name": "constant.numeric.integer.ailang",
+          "match": "-?\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "support-function": {
+      "name": "support.function.ailang",
+      "match": "\\b(len|get|push|head|tail|concat|abs|min|max|sqrt|range|reverse|sort|upper|lower|trim|split|join|chars|find|replace|set|pop|typeof|is|safe_get|print|print_no_nl|log|read_line|read_file|write_file|env_get|mget|mset|mdel|mkeys|mvals|mhas|jparse|jstr|jget|jset|fmt|to_text|char_at|slice|append|is_empty|neg|not|zip|flatmap|http_get|http_post)\\b"
+    },
+    "ssa-variable": {
+      "name": "variable.other.ssa.ailang",
+      "match": "\\bv[0-9]+\\b"
+    }
+  }
+}

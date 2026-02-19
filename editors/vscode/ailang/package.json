@@ -1,0 +1,35 @@
+{
+  "name": "ailang",
+  "displayName": "AILang",
+  "description": "Syntax highlighting for AILang (.ai files)",
+  "version": "0.1.0",
+  "publisher": "ailang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "ailang",
+        "aliases": [
+          "AILang",
+          "ailang"
+        ],
+        "extensions": [
+          ".ai"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "ailang",
+        "scopeName": "source.ailang",
+        "path": "./syntaxes/ailang.tmLanguage.json"
+      }
+    ]
+  }
+}
