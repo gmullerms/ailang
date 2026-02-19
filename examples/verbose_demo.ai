@@ -1,0 +1,35 @@
+-- Verbose mode demo
+-- Run with: ailang --verbose examples/verbose_demo.ai
+-- or:       ailang -v examples/verbose_demo.ai
+--
+-- Trace output (on stderr) will show:
+--   [trace] running test: add_works
+--   [trace] call add(2, 3)
+--   [trace]   => 5
+--   [trace] v0 = 5
+--   [trace] call add(10, 20)
+--   [trace]   => 30
+--   [trace] v0 = 30
+--   [trace] call square(7)
+--   [trace]   => 49
+--   [trace] v1 = 49
+--   ... and so on
+
+#fn add :i32 a:i32 b:i32
+  = + a b
+
+#fn square :i32 x:i32
+  = * x x
+
+#test add_works
+  v0 :i32 = call add 2 3
+  assert == v0 5
+
+#entry
+  v0 :i32 = call add 10 20
+  v1 :i32 = call square 7
+  v2 :[i32] = [1 2 3 4 5]
+  v3 :[i32] = map square v2
+  v4 :i32 = fold v2 0 add
+  log "info" "sum = {0}" v4
+  = v4
