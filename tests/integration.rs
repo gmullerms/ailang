@@ -99,6 +99,13 @@ fn test_connect4() {
     run_ai_test("examples/connect4.ai");
 }
 
+// --- JSON tests ---
+
+#[test]
+fn test_18_json_demo() {
+    run_ai_test("examples/18_json_demo.ai");
+}
+
 // --- Module system tests ---
 
 #[test]

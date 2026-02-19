@@ -67,6 +67,13 @@ Release binary: `target/release/ailang`.
 
 Both modes execute the `#test` blocks. In test mode, `#entry` is skipped so interactive programs (using `read_line`) can have tests that run cleanly.
 
+### Interactive REPL
+```
+./target/debug/ailang
+```
+
+Launches the interactive REPL. Define functions with `#fn` (multi-line block), evaluate expressions inline. Type `exit` to quit.
+
 ### Example output
 ```
 $ ./target/debug/ailang test examples/hello.ai
@@ -97,10 +104,14 @@ ailang/
     lexer.rs        -- Tokenizer (source text -> token stream)
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
-    interpreter.rs  -- Tree-walking interpreter with 47+ built-in functions, TCO
-    main.rs         -- CLI entry point
+    interpreter.rs  -- Tree-walking interpreter with 55+ built-in functions, TCO
+    json.rs         -- JSON parser/serializer (no dependencies)
+    main.rs         -- CLI entry point + REPL
   tests/
     integration.rs  -- Integration tests for all example programs
+  std/
+    math.ai         -- Standard library: math functions
+    list.ai         -- Standard library: list utilities
   examples/
     hello.ai            -- Introduction: add, square, abs, map, fold
     01_two_sum.ai       -- LeetCode #1: recursive pair search
@@ -119,6 +130,8 @@ ailang/
     14_file_io_demo.ai      -- read_file, write_file, env_get
     15_pipeline_demo.ai     -- Pipeline operator |> chaining
     16_error_handling_demo.ai -- error, ?, #err handlers
+    17_modules_demo.ai      -- #use imports, selective imports, privacy
+    18_json_demo.ai         -- jparse, jstr, jget, jset
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   SPEC.md           -- Full language specification
   MANIFESTO.md      -- Why AILang is better for LLMs than human languages
@@ -183,11 +196,19 @@ Error handling with `error`, `?` propagation, and `#err` handlers:
 v0 :f64 = (call safe_divide x y)?
 ```
 
+Modules import functions from other files:
+```
+#use "math_helpers"
+#use "std/math" {sqrt abs}
+```
+
 Iteration is functional — no loops:
 ```
 v0 :[i32] = map (fn x:i32 => * x x) nums
 v1 :i32 = fold nums 0 (fn acc:i32 x:i32 => + acc x)
 v2 :[i32] = filter (fn x:i32 => > x 0) nums
+v3 :[[any]] = zip [1 2 3] ["a" "b" "c"]
+v4 :[i32] = flatmap (fn x:i32 => [x (* x x)]) nums
 ```
 
 Sub-expressions as arguments need `()` grouping:
@@ -214,7 +235,7 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`
 
 ### List
-`len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+`len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`, `zip`, `flatmap`
 
 ### Error
 `error`
@@ -225,18 +246,21 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 ### Map
 `mget`, `mset`, `mdel`, `mkeys`, `mvals`, `mhas`
 
+### JSON
+`jparse`, `jstr`, `jget`, `jset`
+
 ### I/O
 `print`, `print_no_nl`, `read_line`, `log`, `read_file`, `write_file`, `env_get`
 
 ## Testing
 
-AILang has 152 tests: 139 unit tests (lexer, parser, interpreter) and 13 integration tests.
+AILang has 182 tests: 162 unit tests (lexer, parser, interpreter) and 20 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system tests.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
@@ -244,7 +268,7 @@ CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
 - **[SPEC.md](SPEC.md)** — Full language specification with grammar, types, operations, and code generation guide
 - **[MANIFESTO.md](MANIFESTO.md)** — Why human programming languages are wrong for AI, with side-by-side comparisons
-- **[TODO.md](TODO.md)** — Prioritized roadmap: FFI, modules, compiler backend, agent primitives
+- **[TODO.md](TODO.md)** — Prioritized roadmap: FFI, compiler backend, agent primitives
 
 ## License
 
