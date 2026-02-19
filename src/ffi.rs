@@ -357,7 +357,7 @@ fn convert_f64_return(raw: f64, return_type: &AiType) -> Result<Value, String> {
 // Library path resolution
 // ---------------------------------------------------------------------------
 
-fn resolve_library_path(name: &str, search_dir: Option<&Path>) -> Result<PathBuf, String> {
+pub fn resolve_library_path(name: &str, search_dir: Option<&Path>) -> Result<PathBuf, String> {
     let path = Path::new(name);
 
     // If name has an extension or is absolute, try it directly
