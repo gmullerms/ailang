@@ -1,0 +1,29 @@
+-- AILang HTTP Demo
+-- Demonstrates: http_get, http_post builtins with error handling
+-- Since real URLs may not be available, we test error handling paths.
+
+#test http_get_error_handling
+  v0 :any = call http_get "http://invalid.localhost.test"
+  assert call is "err" v0
+
+#test http_post_error_handling
+  v0 :any = call http_post "http://invalid.localhost.test" "{}"
+  assert call is "err" v0
+
+#test http_post_with_content_type_error_handling
+  v0 :any = call http_post "http://invalid.localhost.test" "data" "text/plain"
+  assert call is "err" v0
+
+#entry
+  > "--- HTTP Demo ---"
+  > "1. http_get with invalid URL (expect error):"
+  v0 :any = call http_get "http://invalid.localhost.test"
+  > v0
+  > "2. http_post with invalid URL (expect error):"
+  v1 :any = call http_post "http://invalid.localhost.test" "{\"key\": \"value\"}"
+  > v1
+  > "3. Checking error type:"
+  v2 :bool = call is "err" v0
+  > v2
+  > "--- Done ---"
+  = 0
