@@ -10,3 +10,4 @@ keywords = ["programming-language", "ai", "agents", "interpreter"]
 categories = ["compilers", "command-line-utilities"]
 
 [dependencies]
+ureq = { version = "3", default-features = false }
