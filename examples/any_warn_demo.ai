@@ -1,0 +1,19 @@
+-- Demonstrates :any type warnings
+-- Running this file will produce warnings on stderr for each :any usage.
+
+#fn process_data :any x:any
+  v0 :any = x
+  = v0
+
+#fn typed_add :i32 a:i32 b:i32
+  v0 :i32 = + a b
+  = v0
+
+#fn list_any :[any] items:[any]
+  = items
+
+#const ANYTHING :any = "hello"
+
+#test any_warn_test
+  v0 :i32 = call typed_add 2 3
+  assert == v0 5
