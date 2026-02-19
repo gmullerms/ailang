@@ -162,6 +162,8 @@ pub struct Interpreter {
     std_dir: Option<PathBuf>,
     /// When true, I/O builtins (read_file, write_file, env_get) are blocked
     pub sandboxed: bool,
+    /// When true, print trace information to stderr for each key operation
+    pub verbose: bool,
 }
 
 impl Interpreter {
@@ -184,6 +186,31 @@ impl Interpreter {
             loading_modules: HashSet::new(),
             std_dir,
             sandboxed: false,
+            verbose: false,
+        }
+    }
+
+    /// Format a value for trace output, truncating long lists (>5 elements)
+    /// and long text (>50 chars) for readability.
+    fn trace_value(v: &Value) -> String {
+        match v {
+            Value::Text(s) => {
+                if s.len() > 50 {
+                    format!("\"{}...\"", &s[..50])
+                } else {
+                    format!("\"{}\"", s)
+                }
+            }
+            Value::List(items) => {
+                if items.len() > 5 {
+                    let shown: Vec<String> = items[..5].iter().map(|i| Self::trace_value(i)).collect();
+                    format!("[{} ...]", shown.join(" "))
+                } else {
+                    let shown: Vec<String> = items.iter().map(|i| Self::trace_value(i)).collect();
+                    format!("[{}]", shown.join(" "))
+                }
+            }
+            other => format!("{}", other),
         }
     }
 
@@ -367,6 +394,9 @@ impl Interpreter {
         base_dir: &Path,
         line: usize,
     ) -> Result<(), RuntimeError> {
+        if self.verbose {
+            eprintln!("[trace] loading module: {}", module_path);
+        }
         let file_path = self.resolve_module_path(module_path, base_dir)?;
 
         // Canonicalize for circular import detection
@@ -505,6 +535,9 @@ impl Interpreter {
     }
 
     fn run_test(&self, test: &TestDecl) -> Result<(), RuntimeError> {
+        if self.verbose {
+            eprintln!("[trace] running test: {}", test.name);
+        }
         let mut env = Env::new();
         for (name, val) in &self.constants {
             env.set(name.clone(), val.clone());
@@ -545,6 +578,9 @@ impl Interpreter {
         match stmt {
             Stmt::Bind { name, value, .. } => {
                 let val = self.eval_expr(value, env)?;
+                if self.verbose {
+                    eprintln!("[trace] {} = {}", name, Self::trace_value(&val));
+                }
                 env.set(name.clone(), val);
                 Ok(Signal::Continue)
             }
@@ -1012,8 +1048,16 @@ impl Interpreter {
         args: &[Value],
         _env: &Env,
     ) -> Result<Value, RuntimeError> {
+        if self.verbose {
+            let arg_strs: Vec<String> = args.iter().map(|a| Self::trace_value(a)).collect();
+            eprintln!("[trace] call {}({})", name, arg_strs.join(", "));
+        }
+
         // Check built-in functions first
         if let Some(result) = self.try_builtin(name, args)? {
+            if self.verbose {
+                eprintln!("[trace]   => {}", Self::trace_value(&result));
+            }
             return Ok(result);
         }
 
@@ -1022,7 +1066,13 @@ impl Interpreter {
 
         // If there is no error handler, call directly without interception
         if handler.is_none() {
-            return self.call_function_inner(name, args);
+            let result = self.call_function_inner(name, args);
+            if self.verbose {
+                if let Ok(ref val) = result {
+                    eprintln!("[trace]   => {}", Self::trace_value(val));
+                }
+            }
+            return result;
         }
 
         // There IS an error handler — use retry/fallback logic
@@ -1051,7 +1101,12 @@ impl Interpreter {
                     };
                     continue; // retry if attempts remain
                 }
-                Ok(val) => return Ok(val), // success
+                Ok(val) => {
+                    if self.verbose {
+                        eprintln!("[trace]   => {}", Self::trace_value(&val));
+                    }
+                    return Ok(val); // success
+                }
             }
         }
 
@@ -1062,7 +1117,13 @@ impl Interpreter {
                 handler_env.set(cname.clone(), cval.clone());
             }
             handler_env.set("err".to_string(), Value::Text(last_error_msg));
-            return self.eval_expr(fallback_expr, &handler_env);
+            let result = self.eval_expr(fallback_expr, &handler_env);
+            if self.verbose {
+                if let Ok(ref val) = result {
+                    eprintln!("[trace]   => {}", Self::trace_value(val));
+                }
+            }
+            return result;
         }
 
         // Handler exists but has no fallback — propagate the error
@@ -3251,6 +3312,21 @@ mod tests {
         interp.run(program, false).expect("runtime error")
     }
 
+    // -------------------------------------------------------
+    // Verbose mode
+    // -------------------------------------------------------
+
+    /// Helper: parse + run an AILang program with verbose=true and return the result value
+    fn run_program_verbose(source: &str) -> Value {
+        let mut lexer = Lexer::new(source);
+        let tokens = lexer.tokenize().expect("lexer failed");
+        let mut parser = Parser::new(tokens);
+        let program = parser.parse().expect("parser failed");
+        let mut interp = Interpreter::new();
+        interp.verbose = true;
+        interp.run(program, false).expect("runtime error")
+    }
+
     #[test]
     fn test_sandbox_blocks_read_file() {
         let v = run_program_sandboxed(
@@ -3298,5 +3374,59 @@ mod tests {
             "expected 42 (print should work in sandbox), got: {:?}",
             v
         );
+    }
+
+    #[test]
+    fn test_verbose_mode_doesnt_crash() {
+        // Run a program that exercises function calls, binds, and tests in verbose mode.
+        // The main requirement is that it completes without error.
+        let source = r#"
+#fn add :i32 a:i32 b:i32
+  = + a b
+
+#fn square :i32 x:i32
+  = * x x
+
+#test add_works
+  v0 :i32 = call add 2 3
+  assert == v0 5
+
+#entry
+  v0 :i32 = call add 10 20
+  v1 :i32 = call square 7
+  v2 :[i32] = [1 2 3 4 5]
+  v3 :[i32] = map square v2
+  v4 :i32 = fold v2 0 add
+  = v4
+"#;
+        let v = run_program_verbose(source);
+        assert!(matches!(v, Value::Int(15)), "expected 15, got: {:?}", v);
+    }
+
+    #[test]
+    fn test_verbose_trace_value_truncation() {
+        // Verify trace_value truncates long lists and long text
+        let long_list = Value::List(vec![
+            Value::Int(1), Value::Int(2), Value::Int(3),
+            Value::Int(4), Value::Int(5), Value::Int(6),
+            Value::Int(7),
+        ]);
+        let trace = Interpreter::trace_value(&long_list);
+        assert!(trace.contains("..."), "expected '...' in truncated list: {}", trace);
+        assert!(!trace.contains("7"), "element 7 should not appear in truncated output: {}", trace);
+
+        let long_text = Value::Text("a".repeat(100));
+        let trace = Interpreter::trace_value(&long_text);
+        assert!(trace.contains("..."), "expected '...' in truncated text: {}", trace);
+        assert!(trace.len() < 100, "trace should be shorter than original: len={}", trace.len());
+
+        // Short values should not be truncated
+        let short = Value::Int(42);
+        let trace = Interpreter::trace_value(&short);
+        assert_eq!(trace, "42");
+
+        let short_text = Value::Text("hello".to_string());
+        let trace = Interpreter::trace_value(&short_text);
+        assert_eq!(trace, "\"hello\"");
     }
 }

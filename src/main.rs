@@ -34,23 +34,31 @@ const BANNER: &str = r#"
 fn run() {
     let args: Vec<String> = env::args().collect();
 
-    // Extract --sandbox flag from any position
-    let sandboxed = args.iter().any(|a| a == "--sandbox");
-    let filtered_args: Vec<&String> = args.iter().filter(|a| a.as_str() != "--sandbox").collect();
+    // Parse flags: --sandbox, --verbose / -v
+    let mut sandboxed = false;
+    let mut verbose = false;
+    let mut positional: Vec<&String> = Vec::new();
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--sandbox" => sandboxed = true,
+            "--verbose" | "-v" => verbose = true,
+            _ => positional.push(arg),
+        }
+    }
 
-    if filtered_args.len() < 2 {
-        run_repl(sandboxed);
+    if positional.is_empty() {
+        run_repl(sandboxed, verbose);
         return;
     }
 
-    let (run_tests_only, file_path) = if filtered_args[1] == "test" {
-        if filtered_args.len() < 3 {
+    let (run_tests_only, file_path) = if positional[0] == "test" {
+        if positional.len() < 2 {
             eprintln!("usage: ailang test <file.ai>");
             process::exit(1);
         }
-        (true, filtered_args[2].as_str())
+        (true, positional[1].as_str())
     } else {
-        (false, filtered_args[1].as_str())
+        (false, positional[0].as_str())
     };
 
     eprintln!("AILang v{} | {}{}", VERSION, file_path, if sandboxed { " [sandbox]" } else { "" });
@@ -101,6 +109,7 @@ fn run() {
     // Interpret
     let mut interp = interpreter::Interpreter::new();
     interp.sandboxed = sandboxed;
+    interp.verbose = verbose;
     let source_path = std::path::Path::new(file_path);
     let source_path = if source_path.is_absolute() {
         source_path.to_path_buf()
@@ -122,7 +131,7 @@ fn run() {
     }
 }
 
-fn run_repl(sandboxed: bool) {
+fn run_repl(sandboxed: bool, verbose: bool) {
     eprintln!("{}", BANNER);
     eprintln!("  AILang v{} — Interactive REPL", VERSION);
     eprintln!("  Type expressions to evaluate. Use #fn to define functions.");
@@ -135,6 +144,7 @@ fn run_repl(sandboxed: bool) {
 
     let mut interp = interpreter::Interpreter::new();
     interp.sandboxed = sandboxed;
+    interp.verbose = verbose;
     let mut env = interpreter::Env::new();
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
