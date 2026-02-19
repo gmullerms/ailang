@@ -1,4 +1,5 @@
 mod ast;
+mod formatter;
 mod interpreter;
 mod json;
 mod lexer;
@@ -48,6 +49,16 @@ fn run() {
 
     if positional.is_empty() {
         run_repl(sandboxed, verbose);
+        return;
+    }
+
+    // Handle `fmt` subcommand: ailang fmt <file.ai>
+    if positional[0] == "fmt" {
+        if positional.len() < 2 {
+            eprintln!("usage: ailang fmt <file.ai>");
+            process::exit(1);
+        }
+        run_fmt(positional[1].as_str());
         return;
     }
 
@@ -126,6 +137,50 @@ fn run() {
         }
         Err(e) => {
             eprintln!("{}", e);
+            process::exit(1);
+        }
+    }
+}
+
+fn run_fmt(file_path: &str) {
+    let source = match fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading '{}': {}", file_path, e);
+            process::exit(1);
+        }
+    };
+
+    // Lex
+    let mut lex = lexer::Lexer::new(&source);
+    let tokens = match lex.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    // Parse
+    let mut par = parser::Parser::new(tokens);
+    let program = match par.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    // Format
+    let formatted = formatter::format_program(&program);
+
+    // Write back to file
+    match fs::write(file_path, &formatted) {
+        Ok(()) => {
+            eprintln!("formatted: {}", file_path);
+        }
+        Err(e) => {
+            eprintln!("error writing '{}': {}", file_path, e);
             process::exit(1);
         }
     }
