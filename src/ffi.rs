@@ -374,12 +374,42 @@ pub fn resolve_library_path(name: &str, search_dir: Option<&Path>) -> Result<Pat
     }
 
     // Platform-specific extensions
+    // When name contains directory components (e.g. "../path/to/lib"), apply
+    // the platform prefix only to the filename, not the whole path.
+    let path_obj = Path::new(name);
+    let dir_part = path_obj.parent();
+    let file_stem = path_obj.file_name().unwrap_or_default().to_string_lossy();
+
     let candidates = if cfg!(target_os = "windows") {
-        vec![format!("{}.dll", name), format!("lib{}.dll", name)]
+        let a = format!("{}.dll", file_stem);
+        let b = format!("lib{}.dll", file_stem);
+        match dir_part {
+            Some(d) if d != Path::new("") => vec![
+                d.join(&a).to_string_lossy().into_owned(),
+                d.join(&b).to_string_lossy().into_owned(),
+            ],
+            _ => vec![a, b],
+        }
     } else if cfg!(target_os = "macos") {
-        vec![format!("lib{}.dylib", name), format!("{}.dylib", name)]
+        let a = format!("lib{}.dylib", file_stem);
+        let b = format!("{}.dylib", file_stem);
+        match dir_part {
+            Some(d) if d != Path::new("") => vec![
+                d.join(&a).to_string_lossy().into_owned(),
+                d.join(&b).to_string_lossy().into_owned(),
+            ],
+            _ => vec![a, b],
+        }
     } else {
-        vec![format!("lib{}.so", name), format!("{}.so", name)]
+        let a = format!("lib{}.so", file_stem);
+        let b = format!("{}.so", file_stem);
+        match dir_part {
+            Some(d) if d != Path::new("") => vec![
+                d.join(&a).to_string_lossy().into_owned(),
+                d.join(&b).to_string_lossy().into_owned(),
+            ],
+            _ => vec![a, b],
+        }
     };
 
     // Search in current directory
@@ -485,5 +515,38 @@ mod tests {
         // A path with extension should be tried as-is (even if it doesn't exist)
         let result = resolve_library_path("mylib.dll", None);
         assert!(result.is_ok()); // Falls through to system search
+    }
+
+    #[test]
+    fn test_resolve_library_path_with_dir_components() {
+        // When name has directory components, platform prefix should only apply
+        // to the filename, not the full path
+        let result = resolve_library_path("../some/path/mylib", None).unwrap();
+        let result_str = result.to_string_lossy();
+        if cfg!(target_os = "windows") {
+            assert!(
+                result_str.contains("mylib.dll"),
+                "Expected mylib.dll in '{}' (Windows)",
+                result_str
+            );
+        } else if cfg!(target_os = "macos") {
+            assert!(
+                result_str.contains("libmylib.dylib"),
+                "Expected libmylib.dylib in '{}' (macOS)",
+                result_str
+            );
+        } else {
+            assert!(
+                result_str.contains("libmylib.so"),
+                "Expected libmylib.so in '{}' (Linux)",
+                result_str
+            );
+        }
+        // The lib prefix should NOT appear before the directory component
+        assert!(
+            !result_str.contains("lib.."),
+            "lib prefix should not be prepended to directory: '{}'",
+            result_str
+        );
     }
 }
