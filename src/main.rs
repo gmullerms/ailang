@@ -95,7 +95,15 @@ fn run() {
 
     // Interpret
     let mut interp = interpreter::Interpreter::new();
-    match interp.run(program, run_tests_only) {
+    let source_path = std::path::Path::new(file_path);
+    let source_path = if source_path.is_absolute() {
+        source_path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_default()
+            .join(source_path)
+    };
+    match interp.run_with_path(program, run_tests_only, Some(&source_path)) {
         Ok(val) => {
             if !matches!(val, interpreter::Value::Void) {
                 println!("{}", val);
