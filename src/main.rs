@@ -6,6 +6,7 @@ mod token;
 
 use std::env;
 use std::fs;
+use std::io::{self, BufRead, Write};
 use std::process;
 
 fn main() {
@@ -33,12 +34,8 @@ fn run() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 {
-        eprintln!("{}", BANNER);
-        eprintln!("  AILang v{} — A programming language for AI agents", VERSION);
-        eprintln!("  Not for humans.\n");
-        eprintln!("  usage: ailang <file.ai>");
-        eprintln!("         ailang test <file.ai>");
-        process::exit(1);
+        run_repl();
+        return;
     }
 
     let (run_tests_only, file_path) = if args[1] == "test" {
@@ -107,6 +104,135 @@ fn run() {
         Err(e) => {
             eprintln!("{}", e);
             process::exit(1);
+        }
+    }
+}
+
+fn run_repl() {
+    eprintln!("{}", BANNER);
+    eprintln!("  AILang v{} — Interactive REPL", VERSION);
+    eprintln!("  Type expressions to evaluate. Use #fn to define functions.");
+    eprintln!("  Type 'exit' to quit.\n");
+
+    let mut interp = interpreter::Interpreter::new();
+    let mut env = interpreter::Env::new();
+    let stdin = io::stdin();
+    let mut lines = stdin.lock().lines();
+
+    loop {
+        // Print prompt
+        eprint!("ai> ");
+        io::stderr().flush().ok();
+
+        // Read a line
+        let line = match lines.next() {
+            Some(Ok(line)) => line,
+            Some(Err(e)) => {
+                eprintln!("error reading input: {}", e);
+                break;
+            }
+            None => {
+                // EOF (Ctrl+D / Ctrl+Z)
+                eprintln!();
+                break;
+            }
+        };
+
+        let trimmed = line.trim();
+
+        // Handle empty lines
+        if trimmed.is_empty() {
+            continue;
+        }
+
+        // Handle exit command
+        if trimmed == "exit" {
+            break;
+        }
+
+        // Check if this is a multi-line block (starts with #)
+        let source = if trimmed.starts_with('#') {
+            // Multi-line mode: collect lines until blank line or new # at column 0
+            let mut block = line.clone();
+            block.push('\n');
+
+            loop {
+                eprint!("..  ");
+                io::stderr().flush().ok();
+
+                match lines.next() {
+                    Some(Ok(next_line)) => {
+                        // Blank line or new sigil at column 0 ends the block
+                        if next_line.trim().is_empty() {
+                            break;
+                        }
+                        if next_line.starts_with('#') {
+                            // New sigil — this ends current block.
+                            // We do NOT include this line in the current block.
+                            // For simplicity, just end current block here.
+                            // The user will need to type the next block separately.
+                            break;
+                        }
+                        block.push_str(&next_line);
+                        block.push('\n');
+                    }
+                    Some(Err(_)) => break,
+                    None => {
+                        // EOF during multi-line input
+                        eprintln!();
+                        break;
+                    }
+                }
+            }
+
+            block
+        } else {
+            line.clone()
+        };
+
+        // Lex
+        let mut lex = lexer::Lexer::new(&source);
+        let tokens = match lex.tokenize() {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("error: {}", e);
+                continue;
+            }
+        };
+
+        // Parse as REPL input
+        let mut par = parser::Parser::new(tokens);
+        let input = match par.parse_repl() {
+            Ok(i) => i,
+            Err(e) => {
+                eprintln!("error: {}", e);
+                continue;
+            }
+        };
+
+        // Evaluate
+        match input {
+            parser::ReplInput::Block(program) => {
+                match interp.register_program(program, &mut env) {
+                    Ok(()) => {}
+                    Err(e) => {
+                        eprintln!("error: {}", e);
+                    }
+                }
+            }
+            parser::ReplInput::Stmt(stmt) => {
+                match interp.eval_stmt(&stmt, &mut env) {
+                    Ok(val) => {
+                        if !matches!(val, interpreter::Value::Void) {
+                            println!("{}", val);
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("error: {}", e);
+                    }
+                }
+            }
+            parser::ReplInput::Empty => {}
         }
     }
 }

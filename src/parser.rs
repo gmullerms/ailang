@@ -5,6 +5,17 @@
 use crate::ast::*;
 use crate::token::{Token, TokenKind};
 
+/// Represents a parsed REPL input — either a top-level block (function def, etc.)
+/// or a single statement/expression.
+pub enum ReplInput {
+    /// A complete program fragment (one or more top-level blocks)
+    Block(Program),
+    /// A single statement (bind, expression, etc.)
+    Stmt(Stmt),
+    /// Empty input
+    Empty,
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
@@ -13,6 +24,67 @@ pub struct Parser {
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, pos: 0 }
+    }
+
+    /// Parse a REPL input line as either a top-level program fragment (if it
+    /// starts with a sigil like #fn, #const, etc.) or as a single statement
+    /// (bind, expression, etc.).
+    ///
+    /// Returns `Ok(ReplInput::Block(program))` for sigil blocks, or
+    /// `Ok(ReplInput::Stmt(stmt))` for single-line statements/expressions.
+    pub fn parse_repl(&mut self) -> Result<ReplInput, ParseError> {
+        self.skip_newlines();
+
+        if self.is_at_end() {
+            return Ok(ReplInput::Empty);
+        }
+
+        // If the input starts with a sigil token, parse as a program fragment
+        match &self.peek().kind {
+            TokenKind::Fn
+            | TokenKind::Type
+            | TokenKind::Enum
+            | TokenKind::Const
+            | TokenKind::Use
+            | TokenKind::Entry
+            | TokenKind::Test
+            | TokenKind::Err => {
+                let program = self.parse()?;
+                Ok(ReplInput::Block(program))
+            }
+            _ => {
+                // Check if this looks like a bind statement: vN :Type = expr
+                // We need lookahead: if Ident(v...) followed by Colon, it's a bind.
+                // Otherwise, if Ident(v...) alone, treat as expression (variable reference).
+                let is_bind = matches!(&self.peek().kind,
+                    TokenKind::Ident(name) if name.starts_with('v') && name[1..].chars().all(|c| c.is_ascii_digit()))
+                    && self.peek_at_offset(1).map_or(false, |t| matches!(t.kind, TokenKind::Colon));
+
+                if is_bind {
+                    // Parse as a bind statement
+                    let stmt = self.parse_stmt()?;
+                    Ok(ReplInput::Stmt(stmt))
+                } else {
+                    // For = expr (return syntax), > expr (emit syntax), and other
+                    // statement-like inputs, delegate to parse_stmt.
+                    // For bare identifiers (like v0) and other expressions that
+                    // would confuse parse_stmt's bind detection, parse directly
+                    // as an expression.
+                    let is_var_ref = matches!(&self.peek().kind,
+                        TokenKind::Ident(name) if name.starts_with('v') && name[1..].chars().all(|c| c.is_ascii_digit()));
+
+                    if is_var_ref {
+                        // It's a v-identifier without colon — treat as expression
+                        let expr = self.parse_expr()?;
+                        Ok(ReplInput::Stmt(Stmt::Effect { expr }))
+                    } else {
+                        // Use parse_stmt for =, >, and everything else
+                        let stmt = self.parse_stmt()?;
+                        Ok(ReplInput::Stmt(stmt))
+                    }
+                }
+            }
+        }
     }
 
     pub fn parse(&mut self) -> Result<Program, ParseError> {
@@ -894,6 +966,15 @@ impl Parser {
 
     fn peek(&self) -> &Token {
         &self.tokens[self.pos.min(self.tokens.len() - 1)]
+    }
+
+    fn peek_at_offset(&self, offset: usize) -> Option<&Token> {
+        let idx = self.pos + offset;
+        if idx < self.tokens.len() {
+            Some(&self.tokens[idx])
+        } else {
+            None
+        }
     }
 
     fn advance(&mut self) -> &Token {
