@@ -34,7 +34,7 @@
   ```
 - [x] Parser: condition-value pairs, odd final element is default
 - [x] Interpreter: evaluate conditions left-to-right, return first matching value (lazy)
-- [ ] Update SPEC.md with `cond` grammar and semantics
+- [x] Update SPEC.md with `cond` grammar and semantics
 - [x] Add examples demonstrating `cond` vs nested `select` (`13_cond_demo.ai`)
 
 ### Project Quality
@@ -52,7 +52,7 @@
 - [x] Detect tail-position calls (last expression in function body is `call` or `select`/`cond` branches are calls)
 - [x] Reuse stack frame for tail calls via trampoline pattern
 - [x] Add tests: deep recursion (10k+ depth), mutual recursion, accumulator pattern (11 tests)
-- [ ] Document TCO guarantee in SPEC.md
+- [x] Document TCO guarantee in SPEC.md
 
 ### Pipeline Operator
 - [x] Implement `|>` pipeline sugar: `val |> fn1 |> fn2` desugars to `call fn2 (call fn1 val)`
@@ -60,14 +60,14 @@
 - [x] Add pipeline examples (`15_pipeline_demo.ai`) and 9 tests (3 parser + 6 interpreter)
 
 ### Iteration Extensions
-- [ ] `zip` — combine two lists into list of tuples
-- [ ] `flatmap` — map then flatten one level
+- [x] `zip` — combine two lists into list of tuples (5 tests)
+- [x] `flatmap` — map then flatten one level (5 tests)
 
 ### Module System
-- [ ] Implement `#use` module loading (resolve file paths, parse, merge declarations)
-- [ ] Support selective imports: `#use math {sqrt abs}`
-- [ ] Enforce `_` prefix visibility (private functions not importable)
-- [ ] Standard library: `std/math.ai`, `std/text.ai`, `std/list.ai`
+- [x] Implement `#use` module loading (resolve file paths, parse, merge declarations)
+- [x] Support selective imports: `#use math {sqrt abs}`
+- [x] Enforce `_` prefix visibility (private functions not importable)
+- [x] Standard library: `std/math.ai`, `std/list.ai` (6 module integration tests)
 
 ### Error Handling
 - [x] Wire up `#err` handler blocks with fallback and retry logic
@@ -76,10 +76,11 @@
 - [x] Add 13 error handling tests + example (`16_error_handling_demo.ai`)
 
 ### JSON Operations
-- [ ] `jget` — navigate JSON-like nested maps/lists by path
-- [ ] `jset` — set value at path in nested structure
-- [ ] `jstr` — serialize value to JSON text
-- [ ] `jparse` — parse JSON text into AILang values
+- [x] `jparse` — parse JSON text into AILang values (hand-written recursive descent parser)
+- [x] `jstr` — serialize value to JSON text
+- [x] `jget` — navigate JSON-like nested maps/lists by path
+- [x] `jset` — set value at path in nested structure
+- [x] Add 13 JSON tests + example (`18_json_demo.ai`)
 
 ### FFI — Foreign Function Interface (Phase 1)
 - [ ] `#extern` block to declare native functions from shared libraries (.dll / .so / .dylib)
@@ -110,7 +111,7 @@
 - [ ] Consider arena allocation for AST nodes
 
 ### Developer Experience
-- [ ] REPL mode: `ailang` with no args launches interactive prompt
+- [x] REPL mode: `ailang` with no args launches interactive prompt (ASCII banner, multi-line blocks, persistent env)
 - [x] Better runtime errors: show call stack / function name chain (added `in 'funcname':` wrapping)
 - [ ] `--verbose` flag to trace execution (print each statement as it runs)
 - [ ] Syntax highlighting files (VS Code `.tmLanguage`, tree-sitter grammar)
