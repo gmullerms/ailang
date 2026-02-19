@@ -1,0 +1,5 @@
+-- Test: importing a non-existent module should give a clear error
+#use "nonexistent_module"
+
+#test should_not_reach
+  assert true

@@ -1,0 +1,87 @@
+-- 17_modules_demo.ai — Demonstrates the #use module system
+
+-- Import all public functions from a local helper module
+#use "math_helpers"
+
+-- Import specific functions from the standard math library
+#use "std/math" {PI pow_i clamp_i}
+
+-- Import from standard list library
+#use "std/list" {sum product}
+
+-- Use imported functions
+#fn compute_stuff :i32 x:i32
+  v0 :i32 = call double x
+  v1 :i32 = call square v0
+  = v1
+
+-- Use imported constant
+#fn check_bounds :bool x:i32
+  = <= x MAX_VALUE
+
+-- Tests for imported functions
+
+#test imported_double
+  v0 :i32 = call double 7
+  assert == v0 14
+
+#test imported_triple
+  v0 :i32 = call triple 5
+  assert == v0 15
+
+#test imported_is_even
+  assert == (call is_even 10) true
+  assert == (call is_even 11) false
+
+#test imported_square
+  v0 :i32 = call square 6
+  assert == v0 36
+
+#test imported_constant
+  assert == MAX_VALUE 1000
+
+#test imported_pi
+  assert > PI 3.14
+  assert < PI 3.15
+
+#test imported_pow
+  v0 :i32 = call pow_i 2 8
+  assert == v0 256
+
+#test imported_clamp
+  v0 :i32 = call clamp_i 50 0 100
+  assert == v0 50
+  v1 :i32 = call clamp_i 150 0 100
+  assert == v1 100
+  v2 :i32 = call clamp_i -10 0 100
+  assert == v2 0
+
+#test imported_sum
+  v0 :[i32] = [10 20 30]
+  assert == (call sum v0) 60
+
+#test imported_product
+  v0 :[i32] = [2 3 4]
+  assert == (call product v0) 24
+
+#test computed_value
+  v0 :i32 = call compute_stuff 3
+  -- double(3) = 6, square(6) = 36
+  assert == v0 36
+
+#test bounds_check
+  assert == (call check_bounds 500) true
+  assert == (call check_bounds 1001) false
+
+#entry
+  v0 :i32 = call double 21
+  log "info" "double(21) = {0}" v0
+  v1 :i32 = call pow_i 2 10
+  log "info" "2^10 = {0}" v1
+  v2 :[i32] = [1 2 3 4 5]
+  v3 :i32 = call sum v2
+  log "info" "sum [1 2 3 4 5] = {0}" v3
+  v4 :i32 = call product v2
+  log "info" "product [1 2 3 4 5] = {0}" v4
+  log "info" "PI = {0}" PI
+  = 0

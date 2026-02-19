@@ -1,0 +1,66 @@
+-- std/math.ai — Standard math utilities for AILang
+
+-- Constants
+#const PI :f64 = 3.141592653589793
+#const E :f64 = 2.718281828459045
+
+-- Square root wrapper (delegates to builtin)
+#fn sqrt_f :f64 x:f64
+  = call sqrt x
+
+-- Absolute value wrapper (delegates to builtin)
+#fn abs_i :i32 x:i32
+  = call abs x
+
+#fn abs_f :f64 x:f64
+  = call abs x
+
+-- Min/max wrappers (delegate to builtins)
+#fn min_i :i32 a:i32 b:i32
+  = call min a b
+
+#fn max_i :i32 a:i32 b:i32
+  = call max a b
+
+#fn min_f :f64 a:f64 b:f64
+  = call min a b
+
+#fn max_f :f64 a:f64 b:f64
+  = call max a b
+
+-- Clamp a value to a range
+#fn clamp_i :i32 x:i32 lo:i32 hi:i32
+  = call max lo (call min x hi)
+
+#fn clamp_f :f64 x:f64 lo:f64 hi:f64
+  = call max lo (call min x hi)
+
+-- Power: integer base raised to non-negative integer exponent
+#fn pow_i :i32 base:i32 exp:i32
+  v0 :bool = <= exp 0
+  v1 :i32 = select v0 1 (* base (call pow_i base (- exp 1)))
+  = v1
+
+-- Private helper: not importable
+#fn _internal_helper :i32 x:i32
+  = + x 1
+
+#test math_constants
+  assert > PI 3.14
+  assert < PI 3.15
+  assert > E 2.71
+  assert < E 2.72
+
+#test pow_i_works
+  v0 :i32 = call pow_i 2 10
+  assert == v0 1024
+  v1 :i32 = call pow_i 3 0
+  assert == v1 1
+
+#test clamp_works
+  v0 :i32 = call clamp_i 15 0 10
+  assert == v0 10
+  v1 :i32 = call clamp_i -5 0 10
+  assert == v1 0
+  v2 :i32 = call clamp_i 5 0 10
+  assert == v2 5

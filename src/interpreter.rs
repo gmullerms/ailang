@@ -4,6 +4,8 @@
 
 use crate::ast::*;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
 /// Runtime values
 #[derive(Debug, Clone)]
@@ -154,15 +156,31 @@ pub struct Interpreter {
     type_defs: HashMap<String, TypeDecl>,
     constants: HashMap<String, Value>,
     error_handlers: HashMap<String, ErrHandler>,
+    /// Tracks canonical paths of modules currently being loaded (for circular import detection)
+    loading_modules: HashSet<PathBuf>,
+    /// The base directory used to resolve std library imports
+    std_dir: Option<PathBuf>,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
+        // Determine the std library directory: look relative to the executable
+        let std_dir = std::env::current_exe()
+            .ok()
+            .and_then(|exe| exe.parent().map(|p| p.join("std")))
+            .filter(|p| p.is_dir())
+            .or_else(|| {
+                // Fallback: look in the current working directory
+                std::env::current_dir().ok().map(|p| p.join("std"))
+            });
+
         Interpreter {
             functions: HashMap::new(),
             type_defs: HashMap::new(),
             constants: HashMap::new(),
             error_handlers: HashMap::new(),
+            loading_modules: HashSet::new(),
+            std_dir,
         }
     }
 
@@ -229,6 +247,27 @@ impl Interpreter {
     }
 
     pub fn run(&mut self, program: Program, test_only: bool) -> Result<Value, RuntimeError> {
+        self.run_with_path(program, test_only, None)
+    }
+
+    pub fn run_with_path(
+        &mut self,
+        program: Program,
+        test_only: bool,
+        source_path: Option<&Path>,
+    ) -> Result<Value, RuntimeError> {
+        // Process #use declarations first
+        if !program.uses.is_empty() {
+            let base_dir = source_path
+                .and_then(|p| p.parent())
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+            for use_decl in &program.uses {
+                self.load_module(&use_decl.path, &use_decl.names, &base_dir, use_decl.line)?;
+            }
+        }
+
         // Register all declarations
         for c in &program.consts {
             let val = self.eval_expr(&c.value, &Env::new())?;
@@ -268,6 +307,198 @@ impl Interpreter {
         } else {
             Ok(Value::Void)
         }
+    }
+
+    /// Resolve a module path to a file system path.
+    /// - "math" resolves to `<base_dir>/math.ai`
+    /// - "std/math" resolves to `<std_dir>/math.ai` (standard library) or `<base_dir>/std/math.ai`
+    fn resolve_module_path(&self, module_path: &str, base_dir: &Path) -> Result<PathBuf, RuntimeError> {
+        // Check if this is a std library path
+        if module_path.starts_with("std/") {
+            let relative = &module_path["std/".len()..];
+            let file_name = format!("{}.ai", relative);
+
+            // First try the std directory (next to executable or cwd)
+            if let Some(ref std_dir) = self.std_dir {
+                let candidate = std_dir.join(&file_name);
+                if candidate.is_file() {
+                    return Ok(candidate);
+                }
+            }
+
+            // Fallback: resolve relative to base_dir
+            let candidate = base_dir.join("std").join(&file_name);
+            if candidate.is_file() {
+                return Ok(candidate);
+            }
+
+            return Err(RuntimeError {
+                message: format!(
+                    "module '{}' not found (looked for '{}')",
+                    module_path, file_name
+                ),
+            });
+        }
+
+        // Regular module: resolve relative to the importing file
+        let file_name = format!("{}.ai", module_path);
+        let candidate = base_dir.join(&file_name);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+
+        Err(RuntimeError {
+            message: format!(
+                "module '{}' not found (looked for '{}')",
+                module_path,
+                candidate.display()
+            ),
+        })
+    }
+
+    /// Load a module: read, parse, and import its public declarations.
+    fn load_module(
+        &mut self,
+        module_path: &str,
+        names: &Option<Vec<String>>,
+        base_dir: &Path,
+        line: usize,
+    ) -> Result<(), RuntimeError> {
+        let file_path = self.resolve_module_path(module_path, base_dir)?;
+
+        // Canonicalize for circular import detection
+        let canonical = file_path.canonicalize().unwrap_or_else(|_| file_path.clone());
+
+        // Circular import check
+        if self.loading_modules.contains(&canonical) {
+            return Err(RuntimeError {
+                message: format!(
+                    "circular import detected: '{}' (line {})",
+                    module_path, line
+                ),
+            });
+        }
+
+        // Mark as loading
+        self.loading_modules.insert(canonical.clone());
+
+        // Read the module source
+        let source = std::fs::read_to_string(&file_path).map_err(|e| RuntimeError {
+            message: format!("cannot read module '{}': {}", file_path.display(), e),
+        })?;
+
+        // Lex
+        let mut lexer = crate::lexer::Lexer::new(&source);
+        let tokens = lexer.tokenize().map_err(|e| RuntimeError {
+            message: format!("in module '{}': {}", module_path, e),
+        })?;
+
+        // Parse
+        let mut parser = crate::parser::Parser::new(tokens);
+        let module_program = parser.parse().map_err(|e| RuntimeError {
+            message: format!("in module '{}': {}", module_path, e),
+        })?;
+
+        // Recursively process any #use declarations in the module
+        let module_base_dir = file_path
+            .parent()
+            .map(|p| p.to_path_buf())
+            .unwrap_or_else(|| base_dir.to_path_buf());
+
+        for use_decl in &module_program.uses {
+            self.load_module(
+                &use_decl.path,
+                &use_decl.names,
+                &module_base_dir,
+                use_decl.line,
+            )?;
+        }
+
+        // Import constants from the module
+        for c in &module_program.consts {
+            // Skip private names (prefixed with _)
+            if c.name.starts_with('_') {
+                if let Some(selected) = names {
+                    if selected.contains(&c.name) {
+                        return Err(RuntimeError {
+                            message: format!(
+                                "cannot import private constant '{}' from module '{}'",
+                                c.name, module_path
+                            ),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // Selective import check
+            if let Some(selected) = names {
+                if !selected.contains(&c.name) {
+                    continue;
+                }
+            }
+
+            let val = self.eval_expr(&c.value, &Env::new())?;
+            self.constants.insert(c.name.clone(), val);
+        }
+
+        // Import type definitions from the module
+        for t in module_program.types {
+            // Skip private types
+            if t.name.starts_with('_') {
+                if let Some(selected) = names {
+                    if selected.contains(&t.name) {
+                        return Err(RuntimeError {
+                            message: format!(
+                                "cannot import private type '{}' from module '{}'",
+                                t.name, module_path
+                            ),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            if let Some(selected) = names {
+                if !selected.contains(&t.name) {
+                    continue;
+                }
+            }
+
+            self.type_defs.insert(t.name.clone(), t);
+        }
+
+        // Import functions from the module
+        for f in module_program.functions {
+            // Skip private functions (prefixed with _)
+            if f.name.starts_with('_') {
+                if let Some(selected) = names {
+                    if selected.contains(&f.name) {
+                        return Err(RuntimeError {
+                            message: format!(
+                                "cannot import private function '{}' from module '{}'",
+                                f.name, module_path
+                            ),
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // Selective import check
+            if let Some(selected) = names {
+                if !selected.contains(&f.name) {
+                    continue;
+                }
+            }
+
+            self.functions.insert(f.name.clone(), f);
+        }
+
+        // Unmark loading (module is fully loaded)
+        self.loading_modules.remove(&canonical);
+
+        Ok(())
     }
 
     fn run_test(&self, test: &TestDecl) -> Result<(), RuntimeError> {
