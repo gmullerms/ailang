@@ -295,7 +295,7 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 
 ## Testing
 
-AILang has 273 tests: 245 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
+AILang has 274 tests: 246 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
 
 ```
 cargo test
