@@ -34,22 +34,26 @@ const BANNER: &str = r#"
 fn run() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        run_repl();
+    // Extract --sandbox flag from any position
+    let sandboxed = args.iter().any(|a| a == "--sandbox");
+    let filtered_args: Vec<&String> = args.iter().filter(|a| a.as_str() != "--sandbox").collect();
+
+    if filtered_args.len() < 2 {
+        run_repl(sandboxed);
         return;
     }
 
-    let (run_tests_only, file_path) = if args[1] == "test" {
-        if args.len() < 3 {
+    let (run_tests_only, file_path) = if filtered_args[1] == "test" {
+        if filtered_args.len() < 3 {
             eprintln!("usage: ailang test <file.ai>");
             process::exit(1);
         }
-        (true, &args[2])
+        (true, filtered_args[2].as_str())
     } else {
-        (false, &args[1])
+        (false, filtered_args[1].as_str())
     };
 
-    eprintln!("AILang v{} | {}", VERSION, file_path);
+    eprintln!("AILang v{} | {}{}", VERSION, file_path, if sandboxed { " [sandbox]" } else { "" });
 
     let source = match fs::read_to_string(file_path) {
         Ok(s) => s,
@@ -96,6 +100,7 @@ fn run() {
 
     // Interpret
     let mut interp = interpreter::Interpreter::new();
+    interp.sandboxed = sandboxed;
     let source_path = std::path::Path::new(file_path);
     let source_path = if source_path.is_absolute() {
         source_path.to_path_buf()
@@ -117,13 +122,19 @@ fn run() {
     }
 }
 
-fn run_repl() {
+fn run_repl(sandboxed: bool) {
     eprintln!("{}", BANNER);
     eprintln!("  AILang v{} — Interactive REPL", VERSION);
     eprintln!("  Type expressions to evaluate. Use #fn to define functions.");
+    eprintln!("  Use --sandbox to restrict file/env/network I/O.");
     eprintln!("  Type 'exit' to quit.\n");
 
+    if sandboxed {
+        eprintln!("  ** sandbox mode active: file, env, and network I/O are disabled **\n");
+    }
+
     let mut interp = interpreter::Interpreter::new();
+    interp.sandboxed = sandboxed;
     let mut env = interpreter::Env::new();
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
