@@ -119,12 +119,14 @@ ailang/
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
     interpreter.rs  -- Tree-walking interpreter with 55+ built-in functions, TCO
+    ffi.rs          -- Foreign function interface (libloading-based)
     formatter.rs    -- Canonical formatter (ailang fmt)
     warnings.rs     -- Static analysis warnings (:any type usage)
     json.rs         -- JSON parser/serializer (no dependencies)
     main.rs         -- CLI entry point + REPL
   tests/
     integration.rs  -- Integration tests for all example programs
+    ffi_test_lib/   -- Rust cdylib for FFI integration tests
   std/
     math.ai         -- Standard library: math functions
     list.ai         -- Standard library: list utilities
@@ -149,6 +151,7 @@ ailang/
     17_modules_demo.ai      -- #use imports, selective imports, privacy
     18_json_demo.ai         -- jparse, jstr, jget, jset
     19_http_demo.ai         -- http_get, http_post with error handling
+    20_ffi_demo.ai          -- #extern FFI: call native C functions
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   editors/
     vscode/ailang/          -- VS Code syntax highlighting extension
@@ -221,6 +224,17 @@ Modules import functions from other files:
 #use "std/math" {sqrt abs}
 ```
 
+FFI calls native C functions from shared libraries:
+```
+#extern "mylib"
+  add_numbers :i32 a:i32 b:i32
+  compute :f64 x:f64
+
+#entry
+  v0 :i32 = call add_numbers 3 4
+  = 0
+```
+
 Iteration is functional — no loops:
 ```
 v0 :[i32] = map (fn x:i32 => * x x) nums
@@ -273,13 +287,13 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 
 ## Testing
 
-AILang has 262 tests: 236 unit tests (lexer, parser, interpreter, formatter, warnings) and 26 integration tests.
+AILang has 273 tests: 245 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, canonical formatting (SSA renaming, block ordering, expression grouping), `:any` type warnings, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system, HTTP, formatter, and warning tests.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, canonical formatting (SSA renaming, block ordering, expression grouping), `:any` type warnings, FFI value marshaling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system, HTTP, formatter, warning, and FFI tests.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 

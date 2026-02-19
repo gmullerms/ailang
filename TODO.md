@@ -83,16 +83,16 @@
 - [x] Add 13 JSON tests + example (`18_json_demo.ai`)
 
 ### FFI — Foreign Function Interface (Phase 1)
-- [ ] `#extern` block to declare native functions from shared libraries (.dll / .so / .dylib)
+- [x] `#extern` block to declare native functions from shared libraries (.dll / .so / .dylib)
   ```
   #extern "sqlite3"
     sqlite3_open :i32 path:text db:any
     sqlite3_close :i32 db:any
   ```
-- [ ] `libffi` or Rust `dlopen` integration to load shared libraries at runtime
-- [ ] Type marshaling: AILang types <-> C types (i32, f64, text -> `*const c_char`, pointers as opaque `any`)
-- [ ] Return value marshaling: C integers/floats/pointers back to AILang values
-- [ ] Platform-aware library resolution (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS)
+- [x] `libloading` integration to load shared libraries at runtime (no libffi C dependency)
+- [x] Type marshaling: AILang types <-> C types (i32, f64, text -> `*const c_char`, pointers as opaque `any`)
+- [x] Return value marshaling: C integers/floats/pointers back to AILang values
+- [x] Platform-aware library resolution (`.dll` on Windows, `.so` on Linux, `.dylib` on macOS)
 
 ### I/O & Files
 - [x] `read_file` / `write_file` builtins for file I/O
