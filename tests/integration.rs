@@ -1,6 +1,7 @@
 /// Integration tests for AILang
 /// Runs each .ai example file via `cargo run -- test <file>` and asserts exit code 0.
 
+use std::fs;
 use std::process::Command;
 
 /// Helper: run `cargo run -- test <file>` and assert success
@@ -145,4 +146,89 @@ fn test_module_not_found() {
 fn test_private_import_rejected() {
     // A file that tries to import a private function should fail
     run_ai_test_expect_fail("examples/test_private_import.ai");
+}
+
+// --- Formatter tests ---
+
+/// Helper: run `cargo run -- fmt <file>` and assert success
+fn run_ai_fmt(file: &str) {
+    let output = Command::new("cargo")
+        .args(["run", "--", "fmt", file])
+        .output()
+        .unwrap_or_else(|e| panic!("failed to execute cargo run for {}: {}", file, e));
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        output.status.success(),
+        "fmt {} failed (exit code {:?}):\n{}",
+        file,
+        output.status.code(),
+        stderr
+    );
+}
+
+#[test]
+fn test_fmt_idempotent() {
+    // Copy a test file to a temp location, format it, check it's idempotent
+    let src = "examples/05_fibonacci.ai";
+    let tmp = "target/test_fmt_idempotent.ai";
+    fs::copy(src, tmp).expect("failed to copy test file");
+
+    // First format
+    run_ai_fmt(tmp);
+    let first = fs::read_to_string(tmp).expect("failed to read formatted file");
+
+    // Second format (should produce identical output)
+    run_ai_fmt(tmp);
+    let second = fs::read_to_string(tmp).expect("failed to read re-formatted file");
+
+    assert_eq!(first, second, "Formatter should be idempotent");
+
+    // Clean up
+    let _ = fs::remove_file(tmp);
+}
+
+#[test]
+fn test_fmt_block_ordering() {
+    // Write a file with blocks in wrong order, verify formatter reorders them
+    let src = "#entry\n  = 0\n\n#fn add :i32 a:i32 b:i32\n  = + a b\n\n#const N :i32 = 10\n";
+    let tmp = "target/test_fmt_ordering.ai";
+    fs::write(tmp, src).expect("failed to write test file");
+
+    run_ai_fmt(tmp);
+    let result = fs::read_to_string(tmp).expect("failed to read formatted file");
+
+    // #const should come before #fn, #fn before #entry
+    let const_pos = result.find("#const").expect("missing #const");
+    let fn_pos = result.find("#fn").expect("missing #fn");
+    let entry_pos = result.find("#entry").expect("missing #entry");
+    assert!(
+        const_pos < fn_pos,
+        "Expected #const before #fn"
+    );
+    assert!(
+        fn_pos < entry_pos,
+        "Expected #fn before #entry"
+    );
+
+    // Clean up
+    let _ = fs::remove_file(tmp);
+}
+
+#[test]
+fn test_fmt_ssa_renaming() {
+    // The formatter should produce consistent v0, v1, ... names
+    let src = "#fn f :i32 x:i32\n  v0 :i32 = + x 1\n  v1 :i32 = * v0 2\n  = v1\n";
+    let tmp = "target/test_fmt_ssa.ai";
+    fs::write(tmp, src).expect("failed to write test file");
+
+    run_ai_fmt(tmp);
+    let result = fs::read_to_string(tmp).expect("failed to read formatted file");
+
+    assert!(result.contains("v0 :i32 = + x 1"), "Should contain v0 bind");
+    assert!(result.contains("v1 :i32 = * v0 2"), "Should contain v1 bind");
+    assert!(result.contains("= v1"), "Should return v1");
+
+    // Clean up
+    let _ = fs::remove_file(tmp);
 }
