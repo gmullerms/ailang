@@ -34,19 +34,29 @@ const BANNER: &str = r#"
 fn run() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() < 2 {
-        run_repl();
+    // Parse flags: --verbose / -v
+    let mut verbose = false;
+    let mut positional: Vec<&String> = Vec::new();
+    for arg in &args[1..] {
+        match arg.as_str() {
+            "--verbose" | "-v" => verbose = true,
+            _ => positional.push(arg),
+        }
+    }
+
+    if positional.is_empty() {
+        run_repl(verbose);
         return;
     }
 
-    let (run_tests_only, file_path) = if args[1] == "test" {
-        if args.len() < 3 {
+    let (run_tests_only, file_path) = if positional[0] == "test" {
+        if positional.len() < 2 {
             eprintln!("usage: ailang test <file.ai>");
             process::exit(1);
         }
-        (true, &args[2])
+        (true, positional[1].as_str())
     } else {
-        (false, &args[1])
+        (false, positional[0].as_str())
     };
 
     eprintln!("AILang v{} | {}", VERSION, file_path);
@@ -96,6 +106,7 @@ fn run() {
 
     // Interpret
     let mut interp = interpreter::Interpreter::new();
+    interp.verbose = verbose;
     let source_path = std::path::Path::new(file_path);
     let source_path = if source_path.is_absolute() {
         source_path.to_path_buf()
@@ -117,13 +128,14 @@ fn run() {
     }
 }
 
-fn run_repl() {
+fn run_repl(verbose: bool) {
     eprintln!("{}", BANNER);
     eprintln!("  AILang v{} — Interactive REPL", VERSION);
     eprintln!("  Type expressions to evaluate. Use #fn to define functions.");
     eprintln!("  Type 'exit' to quit.\n");
 
     let mut interp = interpreter::Interpreter::new();
+    interp.verbose = verbose;
     let mut env = interpreter::Env::new();
     let stdin = io::stdin();
     let mut lines = stdin.lock().lines();
