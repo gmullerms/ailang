@@ -12,3 +12,4 @@ categories = ["compilers", "command-line-utilities"]
 [dependencies]
 ureq = { version = "3", default-features = false }
 libloading = "0.8"
+goblin = "0.10"

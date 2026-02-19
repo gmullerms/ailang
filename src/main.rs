@@ -64,6 +64,16 @@ fn run() {
         return;
     }
 
+    // Handle `inspect` subcommand: ailang inspect <library>
+    if positional[0] == "inspect" {
+        if positional.len() < 2 {
+            eprintln!("usage: ailang inspect <library>");
+            process::exit(1);
+        }
+        run_inspect(positional[1].as_str());
+        return;
+    }
+
     let (run_tests_only, file_path) = if positional[0] == "test" {
         if positional.len() < 2 {
             eprintln!("usage: ailang test <file.ai>");
@@ -193,6 +203,94 @@ fn run_fmt(file_path: &str) {
             eprintln!("error writing '{}': {}", file_path, e);
             process::exit(1);
         }
+    }
+}
+
+fn run_inspect(lib_name: &str) {
+    use goblin::Object;
+
+    // Resolve the library path using the same logic as FFI
+    let resolved = match ffi::resolve_library_path(lib_name, Some(&std::env::current_dir().unwrap_or_default())) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Read the binary file
+    let data = match fs::read(&resolved) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("error reading '{}': {}", resolved.display(), e);
+            process::exit(1);
+        }
+    };
+
+    // Parse and extract exports
+    let mut exports: Vec<String> = Vec::new();
+
+    match Object::parse(&data) {
+        Ok(Object::PE(pe)) => {
+            for export in &pe.exports {
+                if let Some(name) = export.name {
+                    exports.push(name.to_string());
+                }
+            }
+        }
+        Ok(Object::Elf(elf)) => {
+            for sym in &elf.dynsyms {
+                if sym.is_function() && sym.st_bind() != goblin::elf::sym::STB_LOCAL {
+                    if let Some(name) = elf.dynstrtab.get_at(sym.st_name) {
+                        if !name.is_empty() {
+                            exports.push(name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Object::Mach(mach)) => {
+            match mach {
+                goblin::mach::Mach::Binary(macho) => {
+                    for sym in macho.exports().unwrap_or_default() {
+                        let name = sym.name.strip_prefix('_').unwrap_or(&sym.name);
+                        exports.push(name.to_string());
+                    }
+                }
+                goblin::mach::Mach::Fat(fat) => {
+                    // Use the first architecture
+                    if let Ok(arches) = fat.into_iter().collect::<Result<Vec<_>, _>>() {
+                        if let Some(first) = arches.first() {
+                            match first {
+                                goblin::mach::SingleArch::MachO(macho) => {
+                                    for sym in macho.exports().unwrap_or_default() {
+                                        let name = sym.name.strip_prefix('_').unwrap_or(&sym.name);
+                                        exports.push(name.to_string());
+                                    }
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(_) => {
+            eprintln!("error: '{}' is not a recognized shared library format", resolved.display());
+            process::exit(1);
+        }
+        Err(e) => {
+            eprintln!("error parsing '{}': {}", resolved.display(), e);
+            process::exit(1);
+        }
+    }
+
+    exports.sort();
+
+    println!("Exports from {} ({} symbols):", resolved.display(), exports.len());
+    println!();
+    for name in &exports {
+        println!("  {}", name);
     }
 }
 

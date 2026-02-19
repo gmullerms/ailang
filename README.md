@@ -81,6 +81,14 @@ Launches the interactive REPL. Define functions with `#fn` (multi-line block), e
 
 Rewrites the file in canonical form: SSA variable renaming (`v0`, `v1`, ...), 2-space indentation, canonical block ordering (`#use` -> `#const` -> `#fn` -> `#test` -> `#err` -> `#entry`), and normalized spacing. Idempotent — running it twice produces the same output.
 
+### Inspect a shared library
+```
+./target/debug/ailang inspect mylib.dll
+./target/debug/ailang inspect C:/Windows/System32/kernel32.dll
+```
+
+Lists all exported function symbols from a shared library (.dll / .so / .dylib). Useful for discovering available functions before writing `#extern` blocks. Uses the same library resolution as `#extern` (platform-aware, searches relative to current directory).
+
 ### Flags
 ```
 ./target/debug/ailang --sandbox examples/hello.ai    # Restrict file/env/network I/O
