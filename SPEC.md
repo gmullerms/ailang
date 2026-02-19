@@ -280,6 +280,7 @@ shr a n
 |---------------------------|------------------------------------------|-------------|
 | `call len lst`            | Length                                    | Implemented |
 | `call get lst idx`        | Get element (null if out of range)        | Implemented |
+| `call safe_get lst idx`   | Get element (null if out of range or negative index) | Implemented |
 | `call push lst val`       | Return new list with element appended     | Implemented |
 | `call head lst`           | First element (null if empty)             | Implemented |
 | `call tail lst`           | All but first (empty list if len <= 1)    | Implemented |
@@ -289,8 +290,10 @@ shr a n
 | `call append a b`         | Concatenate two lists                     | Implemented |
 | `call is_empty lst`       | Check if list/text/null is empty          | Implemented |
 | `call slice lst start end`| Sub-list by index range                   | Implemented |
-| `call set lst idx val`    | Return new list with element changed      | Planned     |
-| `call pop lst`            | Return (new_list, last_element)           | Planned     |
+| `call set lst idx val`    | Return new list with element changed      | Implemented |
+| `call pop lst`            | Return (new_list, last_element)           | Implemented |
+| `call zip a b`            | Combine two lists into list of 2-element lists (truncates to shorter) | Implemented |
+| `call flatmap fn lst`     | Map function over list, flatten results one level | Implemented |
 
 ### 5.7 Math Operations
 
@@ -308,6 +311,9 @@ shr a n
 | `call print args...`   | Print to stdout (with newline and flush) | Implemented |
 | `call print_no_nl args...` | Print to stdout without newline (for prompts) | Implemented |
 | `call read_line`       | Read one line from stdin, return trimmed text | Implemented |
+| `call read_file path`  | Read file contents as text (error on failure) | Implemented |
+| `call write_file path content` | Write text to file (returns null, error on failure) | Implemented |
+| `call env_get name`    | Get environment variable (null if not set) | Implemented |
 
 ### 5.9 Map Operations
 
@@ -325,8 +331,16 @@ shr a n
 | Operation          | Description                        | Status      |
 |--------------------|------------------------------------|-------------|
 | `cast TYPE val`    | Explicit type conversion            | Implemented |
-| `typeof val`       | Returns type as text                | Planned     |
-| `is TYPE val`      | Type check, returns bool            | Planned     |
+| `call typeof val`  | Returns type as text                | Implemented |
+| `call is TYPE val` | Type check, returns bool            | Implemented |
+
+### 5.11 Error Operations
+
+| Operation          | Description                        | Status      |
+|--------------------|------------------------------------|-------------|
+| `error "msg"`      | Create an error value              | Implemented |
+| `call error "msg"` | Create an error value (via call)   | Implemented |
+| `expr?`            | Propagate error or unwrap Ok value  | Implemented |
 
 ---
 
@@ -350,7 +364,29 @@ Example:
   = v2
 ```
 
-### 6.2 Match (Pattern Matching)
+### 6.2 Cond (Multi-way Conditional)
+```
+cond COND1 VAL1 COND2 VAL2 ... DEFAULT
+```
+
+`cond` takes alternating condition-value pairs with an odd final element as the default. It evaluates conditions left-to-right using **lazy evaluation** and returns the value corresponding to the first truthy condition. If no condition matches, the default is returned.
+
+`cond` is equivalent to nested `select` expressions but flat:
+```
+-- these are equivalent:
+v0 :text = cond (== x 0) "zero" (> x 0) "pos" "neg"
+v0 :text = select (== x 0) "zero" (select (> x 0) "pos" "neg")
+```
+
+Example:
+```
+#fn classify :text x:i32
+  = cond (== x 0) "zero" (> x 0) "positive" "negative"
+```
+
+**Status:** Implemented
+
+### 6.3 Match (Pattern Matching)
 ```
 match VALUE
   PATTERN1 => EXPR1
@@ -371,7 +407,7 @@ Example:
 
 Match is the **only** multi-line expression and it uses `=>` to keep each case on one line. It is still flat — no nesting of matches.
 
-### 6.3 Iteration (Functional Only)
+### 6.4 Iteration (Functional Only)
 No loops. No while. No for. Everything is functional:
 
 | Operation             | Description                            | Status      |
@@ -380,8 +416,8 @@ No loops. No while. No for. Everything is functional:
 | `filter FN LIST`      | Keep elements where FN returns true    | Implemented |
 | `fold LIST INIT FN`   | Reduce left with accumulator           | Implemented |
 | `each LIST FN`        | Side-effect iteration (returns void)   | Implemented |
-| `zip LISTA LISTB`     | Combine into list of tuples            | Planned     |
-| `flatmap FN LIST`     | Map then flatten                       | Planned     |
+| `zip LISTA LISTB`     | Combine into list of 2-element lists   | Implemented |
+| `flatmap FN LIST`     | Map then flatten one level             | Implemented |
 
 Example:
 ```
@@ -391,38 +427,56 @@ Example:
   = v1
 ```
 
-### 6.4 Pipelines
-The `|>` operator threads values through a chain of operations:
+### 6.5 Pipelines
+The `|>` operator threads a value through a chain of function calls:
 
+```
+value |> func1 |> func2 arg
+```
+
+This desugars to:
+```
+call func2 (call func1 value) arg
+```
+
+The pipeline is left-associative and is pure parser desugaring -- the result of the previous stage is inserted as the **first** argument to the next function call.
+
+Examples:
 ```
 #fn process :text raw:text
-  v0 :text = |> raw (lower) (call trim) (call truncate 100)
+  v0 :text = "  hello  " |> trim |> upper
   = v0
+-- equivalent to: call upper (call trim "  hello  ")
+
+v0 :i32 = 5 |> double |> add 3
+-- equivalent to: call add (call double 5) 3
 ```
 
-This is sugar for:
-```
-v0 :text = lower raw
-v1 :text = call trim v0
-v2 :text = call truncate v1 100
-```
-
-The pipeline form is more token-efficient when operations are simple transforms.
-
-**Status:** Planned
+**Status:** Implemented
 
 ---
 
 ## 7. Error Handling
 
-### 7.1 Result Type
+### 7.1 Error Values
+`error "msg"` creates an error value without raising a runtime exception:
+```
+v0 :any = error "something went wrong"
+-- v0 is Value::Err("something went wrong")
+```
+
+Error values are first-class -- they can be stored, passed, and inspected. Use `call is "err" val` to check if a value is an error.
+
+**Status:** Implemented
+
+### 7.2 Result Type
 Functions that can fail return `!T` (Result type):
 ```
 #fn parse_int :!i32 s:text
   ...
 ```
 
-### 7.2 Try/Unwrap
+### 7.3 Try/Unwrap
 ```
 v0 :!i32 = call parse_int "42"
 v1 :i32 = unwrap v0 0               -- unwrap with default
@@ -431,7 +485,7 @@ v2 :i32 = unwrap v0 panic            -- unwrap or crash
 
 **Status:** Implemented (try, unwrap, ok wrap)
 
-### 7.3 Try Block
+### 7.4 Try Block
 `try` converts any expression into a `!T`:
 ```
 v0 :!text = try call fetch_url "https://example.com"
@@ -439,20 +493,19 @@ v0 :!text = try call fetch_url "https://example.com"
 
 **Status:** Implemented
 
-### 7.4 Error Propagation
-`?` after an expression propagates errors upward (early return):
+### 7.5 Error Propagation
+`expr?` (postfix `?`) propagates errors upward (early return). If `expr` evaluates to an error, it immediately returns that error from the enclosing function. If `expr` is `Value::Ok(v)`, it unwraps to `v`. Otherwise, the value passes through unchanged.
+
 ```
 #fn load_config :!Config path:text
-  v0 :text = call read_file path ?
-  v1 :Config = call parse_json v0 ?
+  v0 :text = (call read_file path)?
+  v1 :Config = (call parse_json v0)?
   = ok v1
 ```
 
-The `?` on a line means: if this returns an error, immediately return that error from the enclosing function.
+**Status:** Implemented
 
-**Status:** Planned
-
-### 7.5 Error Handler Blocks
+### 7.6 Error Handler Blocks
 ```
 #fn fetch_data :text url:text
   v0 :text = call http_get url
@@ -463,12 +516,12 @@ The `?` on a line means: if this returns an error, immediately return that error
   fallback "default_value"
 ```
 
-Error handlers are separate blocks attached by name. This keeps the happy path clean. The AI can modify error handling without touching business logic.
+Error handlers are separate `#err` blocks attached to a function by name. This keeps the happy path clean. The AI can modify error handling without touching business logic.
 
-`retry COUNT DELAY_MS` — retry the function
-`fallback VALUE` — return default on failure
+`retry COUNT DELAY_MS` — retry the function up to COUNT times with DELAY_MS between attempts
+`fallback EXPR` — return this value on failure. The variable `err` is bound to the error message text inside the fallback expression.
 
-**Status:** Parsed but not executed at runtime
+**Status:** Implemented (retry + fallback)
 
 ---
 
@@ -686,21 +739,27 @@ return_stmt = "=" expr
 emit_stmt   = ">" expr
 effect_stmt = EFFECT_FN args            -- log, send, store_set, each, assert
 
-expr        = op_expr | call_expr | select_expr | match_expr
-            | iter_expr | cast_expr | try_expr | unwrap_expr
-            | tool_expr | log_expr | assert_expr
-            | grouped_expr | lambda_expr | literal | NAME
+expr        = pipe_expr
+pipe_expr   = inner_expr ("|>" NAME atom*)*    -- pipeline desugaring
+inner_expr  = op_expr | call_expr | select_expr | cond_expr
+            | match_expr | iter_expr | cast_expr | try_expr
+            | unwrap_expr | error_expr | tool_expr | log_expr
+            | assert_expr | grouped_expr | lambda_expr
+            | literal | NAME
 
 op_expr     = OP expr expr              -- prefix binary
 call_expr   = "call" NAME atom*         -- function call
 select_expr = "select" expr expr expr   -- conditional (lazy)
+cond_expr   = "cond" (expr expr)+ expr  -- multi-way conditional (lazy, odd args)
 match_expr  = "match" atom NEWLINE (INDENT PATTERN "=>" expr NEWLINE)*
-iter_expr   = ("map" | "filter") atom atom
+iter_expr   = ("map" | "filter" | "flatmap") atom atom
             | "fold" atom atom atom
             | "each" atom atom
+            | "zip" atom atom
 cast_expr   = "cast" TYPE atom
 try_expr    = "try" expr
 unwrap_expr = "unwrap" expr expr
+error_expr  = "error" atom              -- create error value
 tool_expr   = "tool" atom atom
 log_expr    = "log" atom atom atom*
 assert_expr = "assert" expr
@@ -709,7 +768,8 @@ grouped_expr = "(" expr ")"             -- sub-expression grouping
 lambda_expr  = "(" "fn" (PARAM ":" TYPE)* "=>" expr ")"
              -- anonymous function / closure
 
-atom        = INT | FLOAT | BOOL | TEXT | NULL | NAME
+atom        = atom_inner "?"?           -- postfix ? for error propagation
+atom_inner  = INT | FLOAT | BOOL | TEXT | NULL | NAME
             | "[" atom* "]"             -- list
             | "{" (atom atom)* "}"      -- map
             | "(" atom* ")"            -- tuple (when not grouped/lambda)
@@ -740,7 +800,9 @@ TYPE        = PRIM_TYPE | "[" TYPE "]" | "{" TYPE ":" TYPE "}"
 | Tool calls as primitive | Agent operations are first-class, not library hacks          |
 | `call` keyword          | Always distinguishes function calls from operators            |
 | Grouped expressions     | Explicit sub-expression boundaries; no precedence needed     |
-| Lazy select             | Safe recursion; only evaluates the taken branch              |
+| Lazy select/cond        | Safe recursion; only evaluates the taken branch              |
+| Tail-call optimization  | Deep recursion (10k+) is safe; no stack overflow concerns    |
+| Pipeline operator       | Linear data flow without intermediate names                  |
 
 ---
 
@@ -758,30 +820,27 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 ### What's Implemented (v0.1)
 - All block types: `#fn`, `#type`, `#enum`, `#const`, `#use`, `#entry`, `#test`, `#err`
 - All prefix operators: arithmetic, comparison, logic, bitwise
-- Control flow: `select` (lazy), `match` with patterns (literal, variant, wildcard)
-- Iteration: `map`, `filter`, `fold`, `each` with lambdas
+- Control flow: `select` (lazy), `cond` (multi-way, lazy), `match` with patterns (literal, variant, wildcard)
+- Iteration: `map`, `filter`, `fold`, `each`, `zip`, `flatmap` with lambdas
+- Pipelines: `|>` operator (parser desugaring)
 - Type system: all primitives parsed, compound types parsed, `cast` executed
-- Error handling: `try`, `unwrap`, `ok` wrap
+- Error handling: `try`, `unwrap`, `ok` wrap, `error` value creation, `?` propagation, `#err` handler blocks (retry + fallback)
 - Agent primitives: `tool` (stub), `log` (stderr output)
-- I/O: `print`, `print_no_nl`, `read_line` (interactive stdin)
-- 37 built-in functions (see sections 5.5–5.9)
+- I/O: `print`, `print_no_nl`, `read_line`, `read_file`, `write_file`, `env_get`
+- 45+ built-in functions (see sections 5.5--5.11)
 - Lambdas/closures with environment capture
 - Grouped sub-expressions
+- Tail-call optimization via trampoline (select, cond, match branches)
 - Tests with `assert` (test-only mode skips `#entry`)
 - Graceful `cast`: text-to-int returns 0 on invalid input
 
 ### What's Planned (v0.2+)
 - FFI: `#extern` blocks for calling native functions from .dll/.so/.dylib
 - Concurrency: `async`/`await`, `par`, channels (`chan`/`send`/`recv`)
-- Pipelines: `|>` operator
-- Iteration: `zip`, `flatmap`
 - Module system: `#use` loading, visibility rules
 - Agent primitives: `prompt`/`prompt_json`, `store_get`/`store_set`/`store_del`, `observe`
 - JSON operations: `jget`, `jset`, `jstr`, `jparse`
-- File I/O: `read_file`, `write_file`
 - HTTP: `http_get`, `http_post`
-- Additional builtins: `find`, `replace`, `set`, `pop`, `typeof`, `is`
-- Error propagation: `?` operator
 - Byte literals
 - Compiler backend (bytecode or native)
 
@@ -1139,6 +1198,7 @@ Functions must be defined before they are called. Helper functions come first, h
 |------------------------------------|-----------------------------------------------------------|
 | A for loop                         | `map`, `filter`, `fold`, or recursion                     |
 | An if/else                         | `select cond then_val else_val`                           |
+| A multi-way if/elif/else           | `cond c1 v1 c2 v2 ... default`                           |
 | A nested loop                      | Multiple `#fn` with recursion                             |
 | A multi-statement lambda           | Extract a `#fn`, pass by name                             |
 | A variable with a descriptive name | `v0`, `v1`, `v2` (SSA)                                   |
@@ -1147,10 +1207,15 @@ Functions must be defined before they are called. Helper functions come first, h
 | Early return / break               | `select` to choose between base case and recursion        |
 | Mutable accumulator                | `fold` with list accumulator `[val1 val2]`                |
 | String building in a loop          | `fold` with text accumulator + `concat`                   |
-| Nested conditionals                | Chain of `select` or separate `#fn` per branch            |
+| Nested conditionals                | `cond`, chain of `select`, or separate `#fn` per branch   |
 | A long expression                  | Break into intermediate `vN` binds, one per line          |
 | Multi-line statement               | **Not possible.** One line = one statement. Always.       |
 | A recursive call with a base case  | Put recursive `call` inside `select`, never in a bind     |
+| Data transformation pipeline       | `value |> func1 |> func2 arg`                             |
+| Combine two lists pairwise         | `zip list_a list_b`                                       |
+| Map and flatten                    | `flatmap fn list`                                         |
+| Create an error                    | `error "msg"` or `call error "msg"`                       |
+| Propagate an error                 | `(expr)?` -- unwraps Ok or returns error                  |
 
 ---
 
@@ -1161,3 +1226,48 @@ AILang guarantees fully deterministic execution: given the same source code and 
 The tree-walking interpreter evaluates expressions in a defined, predictable, left-to-right order within each statement. `select` branches are lazily evaluated, but the choice is deterministic based on the condition value. Functional iteration (`map`, `filter`, `fold`) processes elements sequentially in list order.
 
 This guarantee is critical for AI agents that require reproducible behavior -- an agent can re-run a program and rely on identical results, enabling safe retries, caching, and auditability.
+
+---
+
+## 19. Tail-Call Optimization (TCO)
+
+AILang guarantees tail-call optimization via a **trampoline** mechanism. Recursive calls in tail position do not consume stack frames, making deep recursion (10,000+ levels) safe.
+
+### Tail Positions
+
+The following positions are recognized as tail positions:
+
+1. **Last expression in a function body** — the return value expression of the final `= EXPR` statement
+2. **Both branches of `select`** — `select cond THEN ELSE`, both THEN and ELSE are tail positions
+3. **All branches of `cond`** — `cond c1 v1 c2 v2 ... default`, every value expression and the default are tail positions
+4. **All arms of `match`** — `match val` with `Pattern => EXPR`, every EXPR is a tail position
+
+### Mutual Recursion
+
+Mutual recursion is supported. Function A can tail-call function B, which tail-calls function A, without stack growth:
+
+```
+#fn is_even :bool n:i32
+  = select (<= n 0) true (call is_odd (- n 1))
+
+#fn is_odd :bool n:i32
+  = select (<= n 0) false (call is_even (- n 1))
+```
+
+Both `call is_odd` and `call is_even` are in tail position and optimized.
+
+### Non-Tail Calls
+
+If a recursive call is **not** in tail position (e.g., it is wrapped in an operator like `(* n (call fact (- n 1)))`), TCO does not apply and the call uses a normal stack frame. Use the accumulator pattern to convert non-tail recursion into tail recursion:
+
+```
+-- Non-tail (NOT optimized): multiplication wraps the recursive call
+#fn fact_bad :i32 n:i32
+  = select (<= n 1) 1 (* n (call fact_bad (- n 1)))
+
+-- Tail-recursive (optimized): accumulator carries the result
+#fn fact :i32 n:i32 acc:i32
+  = select (<= n 1) acc (call fact (- n 1) (* acc n))
+```
+
+**Status:** Implemented

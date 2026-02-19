@@ -211,6 +211,16 @@ pub enum Expr {
         list: Box<Expr>,
         func: Box<Expr>,
     },
+    /// zip list_a list_b
+    ZipIter {
+        list_a: Box<Expr>,
+        list_b: Box<Expr>,
+    },
+    /// flatmap fn list
+    FlatMapIter {
+        func: Box<Expr>,
+        list: Box<Expr>,
+    },
     /// cast Type val
     Cast {
         target: AiType,

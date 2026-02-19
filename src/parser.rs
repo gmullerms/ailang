@@ -338,6 +338,8 @@ impl Parser {
             TokenKind::Filter => self.parse_filter_iter(),
             TokenKind::Fold => self.parse_fold_iter(),
             TokenKind::Each => self.parse_each_iter(),
+            TokenKind::Zip => self.parse_zip_iter(),
+            TokenKind::FlatMap => self.parse_flatmap_iter(),
 
             // Cast
             TokenKind::Cast => self.parse_cast(),
@@ -502,6 +504,14 @@ impl Parser {
                 self.advance();
                 "error".to_string()
             }
+            TokenKind::Zip => {
+                self.advance();
+                "zip".to_string()
+            }
+            TokenKind::FlatMap => {
+                self.advance();
+                "flatmap".to_string()
+            }
             _ => return Err(self.error(&format!("expected identifier, got {:?}", self.peek().kind))),
         };
         let mut args = Vec::new();
@@ -649,6 +659,26 @@ impl Parser {
         Ok(Expr::EachIter {
             list: Box::new(list),
             func: Box::new(func),
+        })
+    }
+
+    fn parse_zip_iter(&mut self) -> Result<Expr, ParseError> {
+        self.advance();
+        let list_a = self.parse_atom()?;
+        let list_b = self.parse_atom()?;
+        Ok(Expr::ZipIter {
+            list_a: Box::new(list_a),
+            list_b: Box::new(list_b),
+        })
+    }
+
+    fn parse_flatmap_iter(&mut self) -> Result<Expr, ParseError> {
+        self.advance();
+        let func = self.parse_atom()?;
+        let list = self.parse_atom()?;
+        Ok(Expr::FlatMapIter {
+            func: Box::new(func),
+            list: Box::new(list),
         })
     }
 
@@ -934,6 +964,7 @@ impl Parser {
                 | TokenKind::Fold
                 | TokenKind::Each
                 | TokenKind::FlatMap
+                | TokenKind::Zip
                 | TokenKind::Cast
                 | TokenKind::Try
                 | TokenKind::Unwrap

@@ -465,6 +465,51 @@ impl Interpreter {
                 }
             }
 
+            Expr::ZipIter { list_a, list_b } => {
+                let a_val = self.eval_expr(list_a, env)?;
+                let b_val = self.eval_expr(list_b, env)?;
+                match (a_val, b_val) {
+                    (Value::List(a_items), Value::List(b_items)) => {
+                        let len = a_items.len().min(b_items.len());
+                        let mut results = Vec::with_capacity(len);
+                        for i in 0..len {
+                            results.push(Value::List(vec![
+                                a_items[i].clone(),
+                                b_items[i].clone(),
+                            ]));
+                        }
+                        Ok(Value::List(results))
+                    }
+                    _ => Err(RuntimeError {
+                        message: "zip requires two lists".to_string(),
+                    }),
+                }
+            }
+
+            Expr::FlatMapIter { func, list } => {
+                let fn_val = self.eval_expr(func, env)?;
+                let list_val = self.eval_expr(list, env)?;
+                if let Value::List(items) = list_val {
+                    let mut results = Vec::new();
+                    for item in &items {
+                        let result = self.apply_fn(&fn_val, &[item.clone()], env)?;
+                        match result {
+                            Value::List(sub_items) => results.extend(sub_items),
+                            _ => {
+                                return Err(RuntimeError {
+                                    message: "flatmap function must return a list".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    Ok(Value::List(results))
+                } else {
+                    Err(RuntimeError {
+                        message: "flatmap requires a list".to_string(),
+                    })
+                }
+            }
+
             Expr::Cast { target, value } => {
                 let val = self.eval_expr(value, env)?;
                 self.cast_value(&val, target)
@@ -1367,6 +1412,48 @@ impl Interpreter {
             "error" => {
                 let msg = self.expect_text(&args[0])?;
                 Some(Value::Err(msg.to_string()))
+            }
+            "zip" => {
+                match (&args[0], &args[1]) {
+                    (Value::List(a_items), Value::List(b_items)) => {
+                        let len = a_items.len().min(b_items.len());
+                        let mut results = Vec::with_capacity(len);
+                        for i in 0..len {
+                            results.push(Value::List(vec![
+                                a_items[i].clone(),
+                                b_items[i].clone(),
+                            ]));
+                        }
+                        Some(Value::List(results))
+                    }
+                    _ => return Err(RuntimeError {
+                        message: "zip requires two lists".to_string(),
+                    }),
+                }
+            }
+            "flatmap" => {
+                // flatmap called as builtin: call flatmap fn list
+                // args[0] = function, args[1] = list
+                if let Value::List(items) = &args[1] {
+                    let fn_val = &args[0];
+                    let mut results = Vec::new();
+                    for item in items {
+                        let result = self.apply_fn(fn_val, &[item.clone()], &Env::new())?;
+                        match result {
+                            Value::List(sub_items) => results.extend(sub_items),
+                            _ => {
+                                return Err(RuntimeError {
+                                    message: "flatmap function must return a list".to_string(),
+                                });
+                            }
+                        }
+                    }
+                    Some(Value::List(results))
+                } else {
+                    return Err(RuntimeError {
+                        message: "flatmap requires a list".to_string(),
+                    });
+                }
             }
             _ => None,
         };
@@ -2401,5 +2488,163 @@ mod tests {
             "#fn inner :i32\n  = error \"inner_fail\"\n\n#fn outer :i32\n  v0 :i32 = (call inner)?\n  = + v0 1\n\n#err outer\n  fallback 0\n\n#entry\n  = call outer",
         );
         assert!(matches!(v, Value::Int(0)), "expected 0, got: {:?}", v);
+    }
+
+    // -------------------------------------------------------
+    // Zip: combine two lists into list of tuples
+    // -------------------------------------------------------
+    #[test]
+    fn test_zip_basic() {
+        // zip [1 2 3] ["a" "b" "c"] => [[1 "a"] [2 "b"] [3 "c"]]
+        let v = run_program(
+            "#entry\n  v0 :[[any]] = zip [1 2 3] [\"a\" \"b\" \"c\"]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 3);
+            // Check first pair
+            if let Value::List(pair) = &items[0] {
+                assert!(matches!(pair[0], Value::Int(1)));
+                assert!(matches!(&pair[1], Value::Text(s) if s == "a"));
+            } else {
+                panic!("expected list pair, got: {:?}", items[0]);
+            }
+            // Check third pair
+            if let Value::List(pair) = &items[2] {
+                assert!(matches!(pair[0], Value::Int(3)));
+                assert!(matches!(&pair[1], Value::Text(s) if s == "c"));
+            } else {
+                panic!("expected list pair, got: {:?}", items[2]);
+            }
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_zip_unequal_lengths() {
+        // zip truncates to shorter list length
+        let v = run_program(
+            "#entry\n  v0 :[[any]] = zip [1 2 3] [\"a\" \"b\"]\n  = call len v0",
+        );
+        assert!(matches!(v, Value::Int(2)));
+    }
+
+    #[test]
+    fn test_zip_empty() {
+        // zip with an empty list returns empty
+        let v = run_program(
+            "#entry\n  v0 :[[any]] = zip [] [1 2 3]\n  = call len v0",
+        );
+        assert!(matches!(v, Value::Int(0)));
+    }
+
+    #[test]
+    fn test_zip_via_call() {
+        // zip also works via call syntax
+        let v = run_program(
+            "#entry\n  v0 :[[any]] = call zip [10 20] [30 40]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 2);
+            if let Value::List(pair) = &items[0] {
+                assert!(matches!(pair[0], Value::Int(10)));
+                assert!(matches!(pair[1], Value::Int(30)));
+            } else {
+                panic!("expected list pair, got: {:?}", items[0]);
+            }
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_zip_single_element() {
+        // zip with single-element lists
+        let v = run_program(
+            "#entry\n  v0 :[[any]] = zip [42] [\"x\"]\n  = call len v0",
+        );
+        assert!(matches!(v, Value::Int(1)));
+    }
+
+    // -------------------------------------------------------
+    // FlatMap: map then flatten one level
+    // -------------------------------------------------------
+    #[test]
+    fn test_flatmap_basic() {
+        // flatmap (fn x:i32 => [x (* x x)]) [1 2 3] => [1 1 2 4 3 9]
+        let v = run_program(
+            "#entry\n  v0 :[i32] = flatmap (fn x:i32 => [x (* x x)]) [1 2 3]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 6);
+            let expected = vec![1i64, 1, 2, 4, 3, 9];
+            for (i, exp) in expected.iter().enumerate() {
+                assert!(
+                    matches!(&items[i], Value::Int(n) if n == exp),
+                    "at index {}: expected {}, got {:?}",
+                    i, exp, items[i]
+                );
+            }
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_flatmap_empty_sublists() {
+        // flatmap that returns empty lists for some elements
+        let v = run_program(
+            "#entry\n  v0 :[i32] = flatmap (fn x:i32 => select (> x 2) [x] []) [1 2 3 4]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 2);
+            assert!(matches!(items[0], Value::Int(3)));
+            assert!(matches!(items[1], Value::Int(4)));
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_flatmap_empty_input() {
+        // flatmap on empty list returns empty
+        let v = run_program(
+            "#entry\n  v0 :[i32] = flatmap (fn x:i32 => [x x]) []\n  = call len v0",
+        );
+        assert!(matches!(v, Value::Int(0)));
+    }
+
+    #[test]
+    fn test_flatmap_with_named_fn() {
+        // flatmap with a named function reference
+        let v = run_program(
+            "#fn dup :[i32] x:i32\n  = [x x]\n\n#entry\n  v0 :[i32] = flatmap dup [5 10]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 4);
+            assert!(matches!(items[0], Value::Int(5)));
+            assert!(matches!(items[1], Value::Int(5)));
+            assert!(matches!(items[2], Value::Int(10)));
+            assert!(matches!(items[3], Value::Int(10)));
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_flatmap_via_call() {
+        // flatmap also works via call syntax
+        let v = run_program(
+            "#fn dup :[i32] x:i32\n  = [x x]\n\n#entry\n  v0 :[i32] = call flatmap dup [3 7]\n  = v0",
+        );
+        if let Value::List(items) = &v {
+            assert_eq!(items.len(), 4);
+            assert!(matches!(items[0], Value::Int(3)));
+            assert!(matches!(items[1], Value::Int(3)));
+            assert!(matches!(items[2], Value::Int(7)));
+            assert!(matches!(items[3], Value::Int(7)));
+        } else {
+            panic!("expected list, got: {:?}", v);
+        }
     }
 }
