@@ -271,8 +271,9 @@ shr a n
 | `call char_at a idx`    | Get character at index               | Implemented |
 | `call to_text a`        | Convert any value to text            | Implemented |
 | `call fmt tpl a b`      | Format with positional `{0}` `{1}`   | Implemented |
-| `call find a pattern`   | Find index (-1 if not found)         | Planned     |
-| `call replace a old new`| Replace first occurrence             | Planned     |
+| `call find a pattern`   | Find index (-1 if not found)         | Implemented |
+| `call replace a old new`| Replace first occurrence             | Implemented |
+| `call chr code`         | Convert Unicode code point to text character | Implemented |
 
 ### 5.6 List Operations
 
@@ -303,6 +304,7 @@ shr a n
 | `call min a b`     | Minimum of two numbers             | Implemented |
 | `call max a b`     | Maximum of two numbers             | Implemented |
 | `call sqrt x`      | Square root (returns f64)          | Implemented |
+| `call random min max` | Random integer in [min, max]     | Implemented |
 
 ### 5.8 I/O Operations
 
@@ -314,6 +316,8 @@ shr a n
 | `call read_file path`  | Read file contents as text (error on failure) | Implemented |
 | `call write_file path content` | Write text to file (returns null, error on failure) | Implemented |
 | `call env_get name`    | Get environment variable (null if not set) | Implemented |
+| `call sleep ms`        | Sleep for ms milliseconds (returns null) | Implemented |
+| `call read_key`        | Non-blocking key read (returns text or "") | Implemented |
 
 ### 5.9 Map Operations
 
@@ -827,7 +831,7 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Error handling: `try`, `unwrap`, `ok` wrap, `error` value creation, `?` propagation, `#err` handler blocks (retry + fallback)
 - Agent primitives: `tool` (stub), `log` (stderr output)
 - I/O: `print`, `print_no_nl`, `read_line`, `read_file`, `write_file`, `env_get`
-- 45+ built-in functions (see sections 5.5--5.11)
+- 59+ built-in functions (see sections 5.5--5.11)
 - Lambdas/closures with environment capture
 - Grouped sub-expressions
 - Tail-call optimization via trampoline (select, cond, match branches)

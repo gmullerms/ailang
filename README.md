@@ -126,7 +126,7 @@ ailang/
     lexer.rs        -- Tokenizer (source text -> token stream)
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
-    interpreter.rs  -- Tree-walking interpreter with 55+ built-in functions, TCO
+    interpreter.rs  -- Tree-walking interpreter with 59+ built-in functions, TCO
     ffi.rs          -- Foreign function interface (libloading-based)
     formatter.rs    -- Canonical formatter (ailang fmt)
     warnings.rs     -- Static analysis warnings (:any type usage)
@@ -160,6 +160,8 @@ ailang/
     18_json_demo.ai         -- jparse, jstr, jget, jset
     19_http_demo.ai         -- http_get, http_post with error handling
     20_ffi_demo.ai          -- #extern FFI: call native C functions
+    21_distinct_subseq.ai   -- LeetCode #115: functional DP with fold + map
+    22_tetris.ai            -- Tetris: real-time game with ANSI rendering
     connect4.ai             -- Connect 4 game: PvP and PvC with AI
   editors/
     vscode/ailang/          -- VS Code syntax highlighting extension
@@ -270,10 +272,10 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 ## Built-in Functions
 
 ### Math
-`abs`, `min`, `max`, `sqrt`
+`abs`, `min`, `max`, `sqrt`, `random`
 
 ### Text
-`concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`
+`concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`, `chr`
 
 ### List
 `len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`, `zip`, `flatmap`
@@ -291,17 +293,17 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `jparse`, `jstr`, `jget`, `jset`
 
 ### I/O
-`print`, `print_no_nl`, `read_line`, `log`, `read_file`, `write_file`, `env_get`, `http_get`, `http_post`
+`print`, `print_no_nl`, `read_line`, `read_key`, `log`, `read_file`, `write_file`, `env_get`, `http_get`, `http_post`, `sleep`
 
 ## Testing
 
-AILang has 274 tests: 246 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
+AILang has 282 tests: 254 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
 
 ```
 cargo test
 ```
 
-Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, canonical formatting (SSA renaming, block ordering, expression grouping), `:any` type warnings, FFI value marshaling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system, HTTP, formatter, warning, and FFI tests.
+Unit tests cover arithmetic, comparison, select/cond laziness, builtins (including safe_get, chr, random, sleep, read_key, file I/O, env, HTTP, zip, flatmap, JSON), pipeline operator, error handling (?/error/#err), tail-call optimization (10k+ depth recursion), map operations, fold/map/filter, cast, null handling, sandbox mode, verbose tracing, canonical formatting (SSA renaming, block ordering, expression grouping), `:any` type warnings, FFI value marshaling, and parse error detection. Integration tests run each `examples/*.ai` file as a subprocess, including module system, HTTP, formatter, warning, and FFI tests.
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 

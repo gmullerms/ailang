@@ -169,6 +169,8 @@ pub struct Interpreter {
     pub ffi: ffi::FfiManager,
     /// Extern function declarations: fn_name -> (lib_name, return_type, params)
     extern_fns: HashMap<String, (String, AiType, Vec<Param>)>,
+    /// Whether terminal raw mode has been enabled (for read_key)
+    raw_mode_enabled: std::cell::Cell<bool>,
 }
 
 impl Interpreter {
@@ -194,6 +196,7 @@ impl Interpreter {
             verbose: false,
             ffi: ffi::FfiManager::new(),
             extern_fns: HashMap::new(),
+            raw_mode_enabled: std::cell::Cell::new(false),
         }
     }
 
@@ -1405,6 +1408,7 @@ impl Interpreter {
                 "env_get" => return Ok(Some(Value::Err("sandbox: environment access not permitted".to_string()))),
                 "http_get" => return Ok(Some(Value::Err("sandbox: network access not permitted".to_string()))),
                 "http_post" => return Ok(Some(Value::Err("sandbox: network access not permitted".to_string()))),
+                "read_key" => return Ok(Some(Value::Err("sandbox: terminal access not permitted".to_string()))),
                 _ => {}
             }
         }
@@ -1952,6 +1956,87 @@ impl Interpreter {
                     Err(e) => Some(Value::Err(format!("http_post error: {}", e))),
                 }
             }
+            // --- Interactive / system builtins ---
+
+            "chr" => {
+                if let Value::Int(code) = &args[0] {
+                    match char::from_u32(*code as u32) {
+                        Some(c) => Some(Value::Text(c.to_string())),
+                        None => return Err(RuntimeError {
+                            message: format!("chr: invalid code point {}", code),
+                        }),
+                    }
+                } else {
+                    return Err(RuntimeError {
+                        message: format!("chr: expected integer, got {}", args[0].type_name()),
+                    });
+                }
+            }
+            "sleep" => {
+                if let Value::Int(ms) = &args[0] {
+                    std::thread::sleep(std::time::Duration::from_millis(*ms as u64));
+                    Some(Value::Null)
+                } else {
+                    return Err(RuntimeError {
+                        message: format!("sleep: expected integer milliseconds, got {}", args[0].type_name()),
+                    });
+                }
+            }
+            "random" => {
+                if let (Value::Int(min), Value::Int(max)) = (&args[0], &args[1]) {
+                    if min > max {
+                        return Err(RuntimeError {
+                            message: format!("random: min ({}) > max ({})", min, max),
+                        });
+                    }
+                    Some(Value::Int(fastrand::i64(*min..=*max)))
+                } else {
+                    return Err(RuntimeError {
+                        message: "random: expected two integers (min, max)".to_string(),
+                    });
+                }
+            }
+            "read_key" => {
+                use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+                // Enable raw mode on first call
+                if !self.raw_mode_enabled.get() {
+                    if crossterm::terminal::enable_raw_mode().is_ok() {
+                        self.raw_mode_enabled.set(true);
+                    } else {
+                        // No terminal available (e.g. CI) — return empty
+                        return Ok(Some(Value::Text(String::new())));
+                    }
+                }
+                // Non-blocking poll
+                match event::poll(std::time::Duration::ZERO) {
+                    Ok(true) => {
+                        if let Ok(Event::Key(key_event)) = event::read() {
+                            // On Windows, filter for Press events only
+                            if key_event.kind != KeyEventKind::Press {
+                                return Ok(Some(Value::Text(String::new())));
+                            }
+                            let key_str = match key_event.code {
+                                KeyCode::Left => "left".to_string(),
+                                KeyCode::Right => "right".to_string(),
+                                KeyCode::Up => "up".to_string(),
+                                KeyCode::Down => "down".to_string(),
+                                KeyCode::Enter => "enter".to_string(),
+                                KeyCode::Esc => "esc".to_string(),
+                                KeyCode::Backspace => "backspace".to_string(),
+                                KeyCode::Tab => "tab".to_string(),
+                                KeyCode::Char(' ') => "space".to_string(),
+                                KeyCode::Char(c) => c.to_string(),
+                                _ => String::new(),
+                            };
+                            Some(Value::Text(key_str))
+                        } else {
+                            Some(Value::Text(String::new()))
+                        }
+                    }
+                    _ => Some(Value::Text(String::new())),
+                }
+            }
+
             _ => None,
         };
         Ok(result)
@@ -2023,6 +2108,14 @@ impl Interpreter {
             _ => Err(RuntimeError {
                 message: format!("expected text, got {}", val.type_name()),
             }),
+        }
+    }
+}
+
+impl Drop for Interpreter {
+    fn drop(&mut self) {
+        if self.raw_mode_enabled.get() {
+            let _ = crossterm::terminal::disable_raw_mode();
         }
     }
 }
@@ -3490,5 +3583,65 @@ mod tests {
         let short_text = Value::Text("hello".to_string());
         let trace = Interpreter::trace_value(&short_text);
         assert_eq!(trace, "\"hello\"");
+    }
+
+    // --- chr / sleep / random / read_key tests ---
+
+    #[test]
+    fn test_chr_ascii() {
+        let v = run_program("#entry\n  = call chr 65");
+        assert!(matches!(v, Value::Text(ref s) if s == "A"), "expected 'A', got: {:?}", v);
+    }
+
+    #[test]
+    fn test_chr_newline() {
+        let v = run_program("#entry\n  = call chr 10");
+        assert!(matches!(v, Value::Text(ref s) if s == "\n"), "expected newline, got: {:?}", v);
+    }
+
+    #[test]
+    fn test_chr_invalid() {
+        let e = run_program_err("#entry\n  = call chr -1");
+        assert!(e.message.contains("chr"), "expected chr error, got: {}", e.message);
+    }
+
+    #[test]
+    fn test_sleep_works() {
+        let v = run_program("#entry\n  v0 :any = call sleep 1\n  = 42");
+        assert!(matches!(v, Value::Int(42)), "expected 42, got: {:?}", v);
+    }
+
+    #[test]
+    fn test_random_in_range() {
+        let v = run_program("#entry\n  = call random 1 10");
+        if let Value::Int(n) = v {
+            assert!(n >= 1 && n <= 10, "expected 1..10, got: {}", n);
+        } else {
+            panic!("expected Int, got: {:?}", v);
+        }
+    }
+
+    #[test]
+    fn test_random_same_bounds() {
+        let v = run_program("#entry\n  = call random 5 5");
+        assert!(matches!(v, Value::Int(5)), "expected 5, got: {:?}", v);
+    }
+
+    #[test]
+    fn test_read_key_recognized() {
+        let interp = Interpreter::new();
+        let result = interp.try_builtin("read_key", &[]);
+        match result {
+            Ok(Some(Value::Text(_))) => {} // expected: returns "" when no terminal
+            other => panic!("read_key should be recognized as builtin, got: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_read_key_no_input() {
+        // In test environment (no terminal), read_key returns ""
+        let interp = Interpreter::new();
+        let result = interp.try_builtin("read_key", &[]).unwrap().unwrap();
+        assert!(matches!(result, Value::Text(ref s) if s.is_empty()), "expected empty string, got: {:?}", result);
     }
 }

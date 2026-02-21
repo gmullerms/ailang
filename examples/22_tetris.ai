@@ -1,0 +1,188 @@
+-- Tetris - A complete Tetris game in AILang
+-- Controls: Arrow keys to move/rotate, Space to hard drop, Q to quit
+
+-- Piece data: 7 pieces x 4 rotations x 4 cells x 2 coords (row,col) = 224 ints
+#const PIECES :[i32] = [0 0 0 1 0 2 0 3 0 0 1 0 2 0 3 0 0 0 0 1 0 2 0 3 0 0 1 0 2 0 3 0 0 0 0 1 1 0 1 1 0 0 0 1 1 0 1 1 0 0 0 1 1 0 1 1 0 0 0 1 1 0 1 1 0 0 0 1 0 2 1 1 0 0 1 0 1 1 2 0 0 1 1 0 1 1 1 2 0 1 1 0 1 1 2 1 0 1 0 2 1 0 1 1 0 0 1 0 1 1 2 1 0 1 0 2 1 0 1 1 0 0 1 0 1 1 2 1 0 0 0 1 1 1 1 2 0 1 1 0 1 1 2 0 0 0 0 1 1 1 1 2 0 1 1 0 1 1 2 0 0 0 1 0 1 1 1 2 0 0 0 1 1 0 2 0 0 0 0 1 0 2 1 2 0 1 1 1 2 0 2 1 0 2 1 0 1 1 1 2 0 0 1 0 2 0 2 1 0 0 0 1 0 2 1 0 0 0 0 1 1 1 2 1]
+-- Colors: 0=bg, 1-7=piece colors (256-color palette)
+#const COLORS :[i32] = [234 51 226 129 46 196 27 208]
+
+#fn make_board :[i32]
+  = map (fn i:i32 => 0) (call range 0 200)
+
+#fn get_cell :i32 board:[i32] r:i32 c:i32
+  = call get board (+ (* r 10) c)
+
+#fn set_cell :[i32] board:[i32] r:i32 c:i32 val:i32
+  = call set board (+ (* r 10) c) val
+
+#fn get_piece_row :i32 id:i32 rot:i32 i:i32
+  v0 :i32 = + (* (- id 1) 32) (+ (* rot 8) (* i 2))
+  = call get PIECES v0
+
+#fn get_piece_col :i32 id:i32 rot:i32 i:i32
+  v0 :i32 = + (* (- id 1) 32) (+ (* rot 8) (+ (* i 2) 1))
+  = call get PIECES v0
+
+#fn is_piece_at :bool id:i32 rot:i32 row:i32 col:i32 r:i32 c:i32
+  v0 :bool = and (== r (+ row (call get_piece_row id rot 0))) (== c (+ col (call get_piece_col id rot 0)))
+  v1 :bool = and (== r (+ row (call get_piece_row id rot 1))) (== c (+ col (call get_piece_col id rot 1)))
+  v2 :bool = and (== r (+ row (call get_piece_row id rot 2))) (== c (+ col (call get_piece_col id rot 2)))
+  v3 :bool = and (== r (+ row (call get_piece_row id rot 3))) (== c (+ col (call get_piece_col id rot 3)))
+  = or v0 (or v1 (or v2 v3))
+
+#fn check_cell :bool board:[i32] r:i32 c:i32
+  = or (< c 0) (or (>= c 10) (or (>= r 20) (and (>= r 0) (!= (call get_cell board r c) 0))))
+
+#fn can_place :bool board:[i32] id:i32 rot:i32 row:i32 col:i32
+  v0 :i32 = + row (call get_piece_row id rot 0)
+  v1 :i32 = + col (call get_piece_col id rot 0)
+  v2 :i32 = + row (call get_piece_row id rot 1)
+  v3 :i32 = + col (call get_piece_col id rot 1)
+  v4 :i32 = + row (call get_piece_row id rot 2)
+  v5 :i32 = + col (call get_piece_col id rot 2)
+  v6 :i32 = + row (call get_piece_row id rot 3)
+  v7 :i32 = + col (call get_piece_col id rot 3)
+  = not (or (call check_cell board v0 v1) (or (call check_cell board v2 v3) (or (call check_cell board v4 v5) (call check_cell board v6 v7))))
+
+#fn place_piece :[i32] board:[i32] id:i32 rot:i32 row:i32 col:i32
+  v0 :i32 = + row (call get_piece_row id rot 0)
+  v1 :i32 = + col (call get_piece_col id rot 0)
+  v2 :i32 = + row (call get_piece_row id rot 1)
+  v3 :i32 = + col (call get_piece_col id rot 1)
+  v4 :i32 = + row (call get_piece_row id rot 2)
+  v5 :i32 = + col (call get_piece_col id rot 2)
+  v6 :i32 = + row (call get_piece_row id rot 3)
+  v7 :i32 = + col (call get_piece_col id rot 3)
+  v8 :[i32] = call set_cell board v0 v1 id
+  v9 :[i32] = call set_cell v8 v2 v3 id
+  v10 :[i32] = call set_cell v9 v4 v5 id
+  = call set_cell v10 v6 v7 id
+
+#fn row_full :bool board:[i32] r:i32
+  v0 :bool = and (!= (call get_cell board r 0) 0) (!= (call get_cell board r 1) 0)
+  v1 :bool = and (!= (call get_cell board r 2) 0) (!= (call get_cell board r 3) 0)
+  v2 :bool = and (!= (call get_cell board r 4) 0) (!= (call get_cell board r 5) 0)
+  v3 :bool = and (!= (call get_cell board r 6) 0) (!= (call get_cell board r 7) 0)
+  v4 :bool = and (!= (call get_cell board r 8) 0) (!= (call get_cell board r 9) 0)
+  = and (and v0 v1) (and v2 (and v3 v4))
+
+#fn count_full :i32 board:[i32]
+  v0 :[bool] = map (fn r:i32 => call row_full board r) (call range 0 20)
+  = fold v0 0 (fn acc:i32 full:bool => + acc (select full 1 0))
+
+#fn clear_lines :[i32] board:[i32]
+  v0 :[i32] = filter (fn r:i32 => not (call row_full board r)) (call range 0 20)
+  v1 :i32 = - 20 (call len v0)
+  v2 :[i32] = map (fn i:i32 => 0) (call range 0 (* v1 10))
+  v3 :[i32] = flatmap (fn r:i32 => call slice board (* r 10) (+ (* r 10) 10)) v0
+  = call append v2 v3
+
+#fn calc_score :i32 n:i32 lvl:i32
+  v0 :i32 = cond (== n 0) 0 (== n 1) 100 (== n 2) 300 (== n 3) 500 800
+  = * v0 lvl
+
+#fn try_move :i32 board:[i32] id:i32 rot:i32 row:i32 col:i32 dc:i32
+  v0 :i32 = + col dc
+  = select (call can_place board id rot row v0) v0 col
+
+#fn try_rotate :i32 board:[i32] id:i32 rot:i32 row:i32 col:i32
+  v0 :i32 = % (+ rot 1) 4
+  = select (call can_place board id v0 row col) v0 rot
+
+#fn hard_drop :i32 board:[i32] id:i32 rot:i32 row:i32 col:i32
+  v0 :i32 = + row 1
+  = select (call can_place board id rot v0 col) (call hard_drop board id rot v0 col) row
+
+#fn cell_text :text val:i32
+  v0 :text = call chr 27
+  v1 :i32 = call get COLORS val
+  = call fmt "{0}[48;5;{1}m  " v0 v1
+
+#fn render_cell :text board:[i32] id:i32 rot:i32 row:i32 col:i32 r:i32 c:i32
+  v0 :i32 = call get_cell board r c
+  v1 :bool = call is_piece_at id rot row col r c
+  v2 :i32 = select v1 id v0
+  = call cell_text v2
+
+#fn render_row :text board:[i32] id:i32 rot:i32 row:i32 col:i32 r:i32
+  v0 :text = call chr 27
+  v1 :text = call fmt "{0}[0m|" v0
+  v2 :text = + (call render_cell board id rot row col r 0) (call render_cell board id rot row col r 1)
+  v3 :text = + (call render_cell board id rot row col r 2) (call render_cell board id rot row col r 3)
+  v4 :text = + (call render_cell board id rot row col r 4) (call render_cell board id rot row col r 5)
+  v5 :text = + (call render_cell board id rot row col r 6) (call render_cell board id rot row col r 7)
+  v6 :text = + (call render_cell board id rot row col r 8) (call render_cell board id rot row col r 9)
+  = + "|" (+ v2 (+ v3 (+ v4 (+ v5 (+ v6 v1)))))
+
+#fn side_text :text r:i32 score:i32 level:i32 lines:i32
+  = cond (== r 1) (call fmt "  Score: {0}" score) (== r 3) (call fmt "  Level: {0}" level) (== r 5) (call fmt "  Lines: {0}" lines) (== r 8) "  Controls:" (== r 9) "  Arrows: move" (== r 10) "  Up: rotate" (== r 11) "  Space: drop" (== r 12) "  Q: quit" ""
+
+#fn render_line :text board:[i32] id:i32 rot:i32 row:i32 col:i32 r:i32 score:i32 level:i32 lines:i32
+  v0 :text = call render_row board id rot row col r
+  v1 :text = call side_text r score level lines
+  = + v0 (+ v1 "\r\n")
+
+#fn render :i32 board:[i32] id:i32 rot:i32 row:i32 col:i32 score:i32 level:i32 lines:i32
+  v0 :text = call chr 27
+  v1 :text = call fmt "{0}[H" v0
+  call print_no_nl v1
+  v2 :text = + "+--------------------+\r\n" (call render_line board id rot row col 0 score level lines)
+  v3 :text = + (call render_line board id rot row col 1 score level lines) (call render_line board id rot row col 2 score level lines)
+  v4 :text = + (call render_line board id rot row col 3 score level lines) (call render_line board id rot row col 4 score level lines)
+  v5 :text = + (call render_line board id rot row col 5 score level lines) (call render_line board id rot row col 6 score level lines)
+  v6 :text = + (call render_line board id rot row col 7 score level lines) (call render_line board id rot row col 8 score level lines)
+  v7 :text = + (call render_line board id rot row col 9 score level lines) (call render_line board id rot row col 10 score level lines)
+  v8 :text = + (call render_line board id rot row col 11 score level lines) (call render_line board id rot row col 12 score level lines)
+  v9 :text = + (call render_line board id rot row col 13 score level lines) (call render_line board id rot row col 14 score level lines)
+  v10 :text = + (call render_line board id rot row col 15 score level lines) (call render_line board id rot row col 16 score level lines)
+  v11 :text = + (call render_line board id rot row col 17 score level lines) (call render_line board id rot row col 18 score level lines)
+  v12 :text = + (call render_line board id rot row col 19 score level lines) "+--------------------+\r\n"
+  v13 :text = + v2 (+ v3 (+ v4 (+ v5 (+ v6 (+ v7 (+ v8 (+ v9 (+ v10 (+ v11 v12)))))))))
+  call print_no_nl v13
+  = 0
+
+#fn game_loop :i32 board:[i32] id:i32 rot:i32 row:i32 col:i32 score:i32 level:i32 lines:i32 next:i32 tick:i32 speed:i32
+  call render board id rot row col score level lines
+  call sleep 50
+  v0 :text = call read_key
+  v1 :bool = == v0 "q"
+  v2 :i32 = cond (== v0 "left") (call try_move board id rot row col -1) (== v0 "right") (call try_move board id rot row col 1) col
+  v3 :i32 = select (== v0 "up") (call try_rotate board id rot row v2) rot
+  v4 :i32 = select (== v0 "space") (call hard_drop board id v3 row v2) row
+  v5 :i32 = select (== v0 "space") speed (+ tick 1)
+  v6 :bool = >= v5 speed
+  v7 :i32 = select v6 0 v5
+  v8 :i32 = select v6 (+ v4 1) v4
+  v9 :bool = call can_place board id v3 v8 v2
+  v10 :i32 = select v9 v8 v4
+  v11 :bool = and v6 (not v9)
+  v12 :[i32] = select v11 (call place_piece board id v3 v4 v2) board
+  v13 :i32 = select v11 (call count_full v12) 0
+  v14 :[i32] = select (and v11 (> v13 0)) (call clear_lines v12) v12
+  v15 :i32 = select v11 (+ score (call calc_score v13 level)) score
+  v16 :i32 = select v11 (+ lines v13) lines
+  v17 :i32 = select v11 (+ 1 (/ v16 10)) level
+  v18 :i32 = select v11 (call max 1 (- 6 v17)) speed
+  v19 :i32 = select v11 next id
+  v20 :i32 = select v11 0 v3
+  v21 :i32 = select v11 0 v10
+  v22 :i32 = select v11 3 v2
+  v23 :i32 = select v11 (call random 1 7) next
+  v24 :bool = select v11 (call can_place v14 v19 v20 v21 v22) true
+  = select (or v1 (not v24)) v15 (call game_loop v14 v19 v20 v21 v22 v15 v17 v16 v23 v7 v18)
+
+#entry
+  v0 :text = call chr 27
+  call print_no_nl (+ v0 "[?1049h")
+  call print_no_nl (+ v0 "[?25l")
+  v1 :[i32] = call make_board
+  v2 :i32 = call random 1 7
+  v3 :i32 = call random 1 7
+  v4 :i32 = call game_loop v1 v2 0 0 3 0 1 0 v3 0 6
+  call print_no_nl (+ v0 "[2J")
+  call print_no_nl (+ v0 "[H")
+  call print (+ "Game Over! Final score: " (call to_text v4))
+  call sleep 2000
+  call print_no_nl (+ v0 "[?25h")
+  call print_no_nl (+ v0 "[?1049l")
+  = 0
