@@ -316,6 +316,16 @@ neg a       -- negate
 and a b     or a b      not a
 ```
 
+### 5.3b Bitwise (prefix, NAMED — no `>>`, `<<`, `&`, `|` symbols)
+```
+band a b    -- bitwise AND (not &)
+bor a b     -- bitwise OR  (not |)
+bxor a b    -- bitwise XOR (not ^)
+bnot a      -- bitwise NOT (not ~)
+shr a n     -- shift right (not >>)
+shl a n     -- shift left  (not <<)
+```
+
 ### 5.4 Select (lazy conditional)
 ```
 select CONDITION THEN_VALUE ELSE_VALUE
@@ -654,6 +664,7 @@ Before submitting generated AILang code, verify:
 - [ ] No `repeat` builtin — use `map (fn i:i32 => 0) (call range 0 N)`
 - [ ] `get` returns `null` on out-of-bounds (not error)
 - [ ] `print` adds newline; `print_no_nl` does not
+- [ ] Bitwise ops use NAMES: `shr` not `>>`, `shl` not `<<`, `band` not `&`
 
 ---
 
