@@ -99,9 +99,23 @@ call random 1 10        call read_key           call print "hi"
 
 ### 2.3 One statement per line — ALWAYS
 
-No multi-line statements. No line continuations. When the parser hits a newline, the statement ends.
+No multi-line statements. No line continuations. When the parser hits a newline, the statement ends. This applies to ALL expressions including `select`, `cond`, `fold`, `map`, and `call`.
 
-**WRONG:**
+**WRONG — `cond` split across lines (parse error):**
+```
+= cond
+    v0 -1
+    v3 v1
+    v4 (call recurse a b)
+    (call recurse c d)
+```
+
+**RIGHT — entire `cond` on one line:**
+```
+= cond v0 -1 v3 v1 v4 (call recurse a b) (call recurse c d)
+```
+
+**WRONG — `select` split across lines:**
 ```
 v0 :i32 = select v1
   (call foo a) (call bar b)
@@ -111,12 +125,14 @@ v0 :i32 = select v1
 v0 :i32 = select v1 (call foo a) (call bar b)
 ```
 
-If a line is too long, use intermediate binds:
+If a line is too long, use intermediate binds to shorten it:
 ```
 v0 :i32 = call foo a
 v1 :i32 = call bar b
 v2 :i32 = select cond v0 v1
 ```
+
+**This is the #2 most common LLM mistake.** Long `cond` expressions tempt multi-line formatting. Resist it — everything must be on ONE line.
 
 ### 2.4 Lambdas are single expressions
 
@@ -622,7 +638,7 @@ Before submitting generated AILang code, verify:
 - [ ] No `call` before `map`, `filter`, `fold`, `each`, `flatmap`, `zip`
 - [ ] No `call` before `select`, `cond`, `cast`, `log`, `assert`, `error`
 - [ ] Comments use `--` not `#` or `//`
-- [ ] All statements are single lines (no line breaks in expressions)
+- [ ] All statements are single lines (no line breaks — especially `cond` with many args!)
 - [ ] Lambdas are single expressions (no binds inside)
 - [ ] Recursive calls are inside `select`/`cond` branches, not in binds
 - [ ] Variables are `v0`, `v1`, `v2`... sequential, no gaps, no reuse
