@@ -100,6 +100,13 @@
 - [x] `env_get` — read environment variables
 - [x] Add 4 I/O tests + example (`14_file_io_demo.ai`)
 
+### Interactive / Game Builtins
+- [x] `chr` — convert Unicode code point to text character
+- [x] `sleep` — pause execution for N milliseconds
+- [x] `random` — generate random integer in [min, max]
+- [x] `read_key` — non-blocking keyboard input (crossterm raw mode)
+- [x] Tetris demo (`22_tetris.ai`) — real-time game with ANSI rendering, 23 functions
+
 ### Sandboxed Execution Mode
 - [x] `--sandbox` flag that restricts I/O (blocks read_file, write_file, env_get, http_get, http_post)
 - [ ] Whitelist-based permission model for agent safety

@@ -1,6 +1,6 @@
 [package]
 name = "ailang"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2024"
 description = "A programming language designed for AI agents"
 license = "MIT"
@@ -13,3 +13,5 @@ categories = ["compilers", "command-line-utilities"]
 ureq = { version = "3", default-features = false }
 libloading = "0.8"
 goblin = "0.10"
+fastrand = "2"
+crossterm = "0.28"

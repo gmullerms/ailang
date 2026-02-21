@@ -1,0 +1,46 @@
+-- LeetCode #115: Distinct Subsequences
+-- Given strings s and t, count distinct subsequences of s that equal t.
+-- DP approach: dp[j] = ways to form t[0..j] from s[0..i] processed so far.
+-- Recurrence: if s[i] == t[j-1] then dp[j] += dp[j-1], else dp[j] unchanged.
+-- Since we rebuild the row functionally, we always read from the old row.
+
+#fn num_distinct :i32 s:text t:text
+  v0 :i32 = call len s
+  v1 :i32 = call len t
+  v2 :[i32] = map (fn i:i32 => select (== i 0) 1 0) (call range 0 (+ v1 1))
+  v3 :[i32] = fold (call range 0 v0) v2 (fn dp:[i32] i:i32 => call update_row dp (call char_at s i) t v1)
+  = call get v3 v1
+
+#fn update_row :[i32] dp:[i32] sc:text t:text tlen:i32
+  = map (fn j:i32 => select (== j 0) 1 (select (== sc (call char_at t (- j 1))) (+ (call get dp j) (call get dp (- j 1))) (call get dp j))) (call range 0 (+ tlen 1))
+
+#test example_1
+  assert == (call num_distinct "rabbbit" "rabbit") 3
+
+#test example_2
+  assert == (call num_distinct "babgbag" "bag") 5
+
+#test single_char_match
+  assert == (call num_distinct "aaa" "a") 3
+
+#test single_char_no_match
+  assert == (call num_distinct "aaa" "b") 0
+
+#test identical
+  assert == (call num_distinct "abc" "abc") 1
+
+#test t_longer_than_s
+  assert == (call num_distinct "ab" "abc") 0
+
+#test empty_t
+  assert == (call num_distinct "abc" "") 1
+
+#test repeated_pattern
+  assert == (call num_distinct "aab" "ab") 2
+
+#entry
+  v0 :i32 = call num_distinct "rabbbit" "rabbit"
+  log "info" "rabbbit / rabbit = {0}" v0
+  v1 :i32 = call num_distinct "babgbag" "bag"
+  log "info" "babgbag / bag = {0}" v1
+  = 0
