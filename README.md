@@ -307,8 +307,20 @@ Unit tests cover arithmetic, comparison, select/cond laziness, builtins (includi
 
 CI runs automatically on push and PRs via GitHub Actions (ubuntu + windows).
 
+## Using AILang with Other LLMs
+
+Want ChatGPT, Gemini, or another LLM to write AILang code? See **[LLM_GUIDE.md](LLM_GUIDE.md)** — a single self-contained reference designed to be pasted into a system prompt or context window. It includes:
+
+- Complete builtin reference (all 57 functions with signatures and examples)
+- Critical rules and anti-patterns that prevent the most common LLM mistakes
+- Working examples at different complexity levels
+- Step-by-step setup instructions for ChatGPT, Claude, Gemini, and any API
+
+**Quick start:** Copy the contents of `LLM_GUIDE.md` into your LLM's system prompt or first message, then ask it to write AILang code.
+
 ## Docs
 
+- **[LLM_GUIDE.md](LLM_GUIDE.md)** — Complete AILang reference for LLMs (paste into system prompt)
 - **[SPEC.md](SPEC.md)** — Full language specification with grammar, types, operations, and code generation guide
 - **[MANIFESTO.md](MANIFESTO.md)** — Why human programming languages are wrong for AI, with side-by-side comparisons
 - **[TODO.md](TODO.md)** — Prioritized roadmap: FFI, compiler backend, agent primitives
