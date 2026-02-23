@@ -1,4 +1,4 @@
-# AILang Specification v0.1
+# AILang Specification v0.8
 
 ## 1. Philosophy
 
@@ -84,10 +84,10 @@ The parser distinguishes grouped expressions from tuples by checking whether the
 
 | Type   | Description              |
 |--------|--------------------------|
-| `i32`  | 32-bit signed integer    |
-| `i64`  | 64-bit signed integer    |
-| `f32`  | 32-bit float             |
-| `f64`  | 64-bit float             |
+| `i32`  | Integer (64-bit internally) |
+| `i64`  | Integer (64-bit, alias)    |
+| `f32`  | Float (64-bit internally)  |
+| `f64`  | 64-bit float               |
 | `bool` | Boolean                  |
 | `text` | UTF-8 string             |
 | `byte` | Single byte              |
@@ -170,10 +170,10 @@ Every value binding includes its type. This is redundant for a compiler but crit
   v0 :f64 = * a a
   v1 :f64 = * b b
   v2 :f64 = + v0 v1
-  = sqrt v2
+  = call sqrt v2
 
 #fn greet :text name:text
-  = concat "Hello " name
+  = call concat "Hello " name
 ```
 
 ### 4.4 Function Calls
@@ -293,8 +293,8 @@ shr a n
 | `call slice lst start end`| Sub-list by index range                   | Implemented |
 | `call set lst idx val`    | Return new list with element changed      | Implemented |
 | `call pop lst`            | Return (new_list, last_element)           | Implemented |
-| `call zip a b`            | Combine two lists into list of 2-element lists (truncates to shorter) | Implemented |
-| `call flatmap fn lst`     | Map function over list, flatten results one level | Implemented |
+| `zip a b`                 | Combine two lists into list of 2-element lists (truncates to shorter). Keyword — also works with `call`. | Implemented |
+| `flatmap fn lst`          | Map function over list, flatten results one level. Keyword — also works with `call`. | Implemented |
 
 ### 5.7 Math Operations
 
@@ -550,7 +550,7 @@ All `#fn` and `#type` definitions are public by default. Prefix with `_` to make
   = + x 1
 ```
 
-**Status:** `#use` is parsed but module loading is not yet implemented.
+**Status:** Implemented. Module files are resolved relative to the importing file, parsed, and merged. Selective imports via `{}` and `_` prefix visibility are enforced.
 
 ---
 
@@ -607,7 +607,7 @@ v3 :text = jstr v0                   -- serialize to text
 v4 :any = jparse "{\"key\":1}"      -- parse from text
 ```
 
-**Status:** Planned. Map literals `{"key" value}` are implemented; JSON-specific operations are not.
+**Status:** Implemented. `jparse` (hand-written recursive descent parser), `jstr`, `jget`, `jset` are all functional. Map literals `{"key" value}` serve as the native data structure for JSON.
 
 ### 10.3 Prompt / LLM Call
 ```
@@ -715,7 +715,7 @@ Run tests with `ailang test <file.ai>`. In test mode, only `#test` blocks execut
   v0 :[text] = ["https://example.com/1" "https://example.com/2"]
   v1 :![Article] = call process_urls v0
   v2 :[Article] = unwrap v1 []
-  each v2 (fn a:Article => log "info" "{0}: {1} words" a.title a.word_count)
+  each v2 (fn a:Article => log "info" "article processed")
   = 0
 ```
 
@@ -821,30 +821,35 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - **Interpreter** (`src/interpreter.rs`) — immutable environments with scope chaining, built-in functions
 - **CLI** (`src/main.rs`) — `ailang <file.ai>` to run, `ailang test <file.ai>` to run tests
 
-### What's Implemented (v0.1)
-- All block types: `#fn`, `#type`, `#enum`, `#const`, `#use`, `#entry`, `#test`, `#err`
+### What's Implemented (v0.8)
+- All block types: `#fn`, `#type`, `#enum`, `#const`, `#use`, `#entry`, `#test`, `#err`, `#extern`
 - All prefix operators: arithmetic, comparison, logic, bitwise
 - Control flow: `select` (lazy), `cond` (multi-way, lazy), `match` with patterns (literal, variant, wildcard)
 - Iteration: `map`, `filter`, `fold`, `each`, `zip`, `flatmap` with lambdas
 - Pipelines: `|>` operator (parser desugaring)
 - Type system: all primitives parsed, compound types parsed, `cast` executed
 - Error handling: `try`, `unwrap`, `ok` wrap, `error` value creation, `?` propagation, `#err` handler blocks (retry + fallback)
+- Module system: `#use` loading with file resolution, selective imports `{name1 name2}`, `_` prefix visibility
+- JSON: `jparse` (hand-written recursive descent), `jstr`, `jget`, `jset`
+- FFI: `#extern` blocks for calling native C functions from .dll/.so/.dylib via `libloading`
+- HTTP: `http_get`, `http_post` via `ureq`
+- I/O: `print`, `print_no_nl`, `read_line`, `read_key`, `read_file`, `write_file`, `env_get`, `sleep`
+- Interactive: `chr` (code point → text), `random` (range), `sleep` (ms), `read_key` (non-blocking)
 - Agent primitives: `tool` (stub), `log` (stderr output)
-- I/O: `print`, `print_no_nl`, `read_line`, `read_file`, `write_file`, `env_get`
-- 59+ built-in functions (see sections 5.5--5.11)
+- 57 built-in functions + 6 keyword-based iteration (see sections 5.5--5.11, 6.4)
 - Lambdas/closures with environment capture
 - Grouped sub-expressions
 - Tail-call optimization via trampoline (select, cond, match branches)
+- Canonical formatter: `ailang fmt` (SSA renaming, block ordering, idempotent)
+- Sandbox mode: `--sandbox` restricts I/O builtins
+- Static warnings: `:any` type usage outside FFI/interop
 - Tests with `assert` (test-only mode skips `#entry`)
 - Graceful `cast`: text-to-int returns 0 on invalid input
 
-### What's Planned (v0.2+)
-- FFI: `#extern` blocks for calling native functions from .dll/.so/.dylib
+### What's Planned (v1.0+)
 - Concurrency: `async`/`await`, `par`, channels (`chan`/`send`/`recv`)
-- Module system: `#use` loading, visibility rules
 - Agent primitives: `prompt`/`prompt_json`, `store_get`/`store_set`/`store_del`, `observe`
-- JSON operations: `jget`, `jset`, `jstr`, `jparse`
-- HTTP: `http_get`, `http_post`
+- FFI Phase 2: struct marshaling, callbacks, array/buffer passing
 - Byte literals
 - Compiler backend (bytecode or native)
 

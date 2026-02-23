@@ -167,34 +167,34 @@ That's **5 levels of nesting**. The LLM must track: which loop it's in, which co
 
 ### AILang — Maximum Depth 1
 ```
-#fn is_pending :bool o:any
-  v0 :text = call get o "status"
+#fn is_pending :bool o:{text:any}
+  v0 :any = call mget o "status"
   = == v0 "pending"
 
-#fn has_quantity :bool item:any
-  = > (call get item "quantity") 0
+#fn has_quantity :bool item:{text:any}
+  = > (call mget item "quantity") 0
 
-#fn calc_price :f64 item:any
-  v0 :f64 = * (call get item "price") (call get item "quantity")
-  v1 :?f64 = call get item "discount"
+#fn calc_price :f64 item:{text:any}
+  v0 :f64 = * (call mget item "price") (call mget item "quantity")
+  v1 :any = call mget item "discount"
   v2 :bool = != v1 null
   v3 :f64 = select v2 (* v0 (- 1.0 v1)) v0
   = v3
 
-#fn is_expensive :bool item:any
+#fn is_expensive :bool item:{text:any}
   v0 :f64 = call calc_price item
   = > v0 100.0
 
-#fn make_result :any order:any item:any
+#fn make_result :{text:any} order:{text:any} item:{text:any}
   v0 :f64 = call calc_price item
-  = {"order_id" (call get order "id") "item" (call get item "name") "price" v0}
+  = {"order_id" (call mget order "id") "item" (call mget item "name") "price" v0}
 
-#fn process_orders :any orders:[any]
-  v0 :[any] = filter (fn o:any => call is_pending o) orders
-  v1 :[any] = flatmap (fn o:any => call get o "items") v0
-  v2 :[any] = filter has_quantity v1
-  v3 :[any] = filter is_expensive v2
-  = map (fn item:any => call make_result item item) v3
+#fn process_orders :[{text:any}] orders:[{text:any}]
+  v0 :[{text:any}] = filter (fn o:{text:any} => call is_pending o) orders
+  v1 :[any] = flatmap (fn o:{text:any} => call mget o "items") v0
+  v2 :[{text:any}] = filter has_quantity v1
+  v3 :[{text:any}] = filter is_expensive v2
+  = map (fn item:{text:any} => call make_result item item) v3
 ```
 
 Every function is flat. Every function does one thing. The LLM never needs to track more than one level of context. Each line is self-contained — you can read line 3 of `calc_price` without looking at lines 1-2 because the type annotation tells you `v1` is `?f64`.
@@ -220,7 +220,7 @@ To understand line 4, the LLM must trace through lines 1-3. What does `fetch` re
 ### AILang
 ```
 #fn transform :bool data:{text:text}
-  v0 :text = call fetch (call get data "url")
+  v0 :text = call fetch (call mget data "url")
   v1 :{text:any} = call jparse v0
   v2 :[any] = unwrap (call jget v1 "items") []
   v3 :i32 = call len v2
@@ -277,9 +277,9 @@ Four styles. All correct. All idiomatic in different contexts. The LLM must choo
 
 ### AILang — One Way
 ```
-#fn process :[Result] items:[Item]
-  v0 :[Item] = filter (fn i:Item => i.valid) items
-  v1 :[Result] = map transform v0
+#fn process :[any] items:[{text:any}]
+  v0 :[{text:any}] = filter (fn i:{text:any} => call mget i "valid") items
+  v1 :[any] = map transform v0
   = v1
 ```
 
@@ -313,17 +313,18 @@ Tokens spent on syntax overhead: `def`, `:`, `[]`, `for`, `in`, `range(`, `,`, `
 
 **AILang (26 tokens for the core logic):**
 ```
+#fn fizz_one :text i:i32
+  v0 :text = call to_text i
+  v1 :text = select (== (% i 5) 0) "Buzz" v0
+  v2 :text = select (== (% i 3) 0) "Fizz" v1
+  = select (== (% i 15) 0) "FizzBuzz" v2
+
 #fn fizzbuzz :[text] n:i32
   v0 :[i32] = call range 1 (+ n 1)
-  v1 :[text] = map (fn i:i32 =>
-    select (== (% i 15) 0) "FizzBuzz"
-    (select (== (% i 3) 0) "Fizz"
-    (select (== (% i 5) 0) "Buzz"
-    (call to_text i)))) v0
-  = v1
+  = map fizz_one v0
 ```
 
-The sigil `#fn` is one token. The type annotations double as documentation. The prefix `%` eliminates parenthesization decisions. The `select` chain is mechanical — no `if/elif/else` keyword variation. The whole program is a transformation pipeline: generate range, map through classification.
+The sigil `#fn` is one token. The type annotations double as documentation. The prefix `%` eliminates parenthesization decisions. The `select` chain is mechanical — no `if/elif/else` keyword variation. Complex logic is extracted into a named function (`fizz_one`), keeping everything flat and single-line.
 
 ---
 
@@ -403,8 +404,8 @@ This is syntactically valid Python. It returns on the first iteration. The bug i
 
 ### AILang — Structure Prevents the Bug
 ```
-#fn process :[any] items:[any]
-  v0 :[any] = filter (fn i:any => i.valid) items
+#fn process :[any] items:[{text:any}]
+  v0 :[{text:any}] = filter (fn i:{text:any} => call mget i "valid") items
   v1 :[any] = map transform v0
   = v1
 ```
@@ -468,4 +469,4 @@ AILang is not a better language for people. It is the right language for machine
 
 ---
 
-*AILang v0.1 — Built by an AI, for AI, to write programs the way machines actually think.*
+*AILang v0.8 — Built by an AI, for AI, to write programs the way machines actually think.*
