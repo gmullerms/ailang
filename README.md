@@ -278,7 +278,10 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `concat`, `len`, `slice`, `upper`, `lower`, `trim`, `split`, `join`, `chars`, `char_at`, `to_text`, `fmt`, `find`, `replace`, `chr`
 
 ### List
-`len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`, `zip`, `flatmap`
+`len`, `get`, `safe_get`, `push`, `set`, `pop`, `head`, `tail`, `range`, `reverse`, `sort`, `append`, `is_empty`, `slice`
+
+### Iteration Keywords (no `call`)
+`map`, `filter`, `fold`, `each`, `zip`, `flatmap`
 
 ### Error
 `error`
@@ -293,7 +296,10 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 `jparse`, `jstr`, `jget`, `jset`
 
 ### I/O
-`print`, `print_no_nl`, `read_line`, `read_key`, `log`, `read_file`, `write_file`, `env_get`, `http_get`, `http_post`, `sleep`
+`print`, `print_no_nl`, `read_line`, `read_key`, `read_file`, `write_file`, `env_get`, `http_get`, `http_post`, `sleep`
+
+### Keywords (no `call`)
+`log`, `select`, `cond`, `cast`, `assert`, `error`, `try`, `unwrap`
 
 ## Testing
 

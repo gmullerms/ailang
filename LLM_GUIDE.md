@@ -27,7 +27,7 @@
 2. Say: "Use this as the AILang reference for all code generation."
 
 ### Any LLM (API, local, etc.)
-Include this document in the system prompt or as the first user message. The document is ~600 lines — well within context limits for modern models.
+Include this document in the system prompt or as the first user message. The document is ~800 lines — well within context limits for modern models.
 
 ---
 
@@ -156,9 +156,12 @@ If complex, extract to a named function:
 -- then: map square_plus nums
 ```
 
-### 2.5 Recursive calls MUST be inside `select`/`cond`, NEVER in binds
+### 2.5 Binds are EAGERLY evaluated — guard dangerous calls in `select`/`cond`
 
-Binds are eagerly evaluated. `select`/`cond` branches are lazy.
+Binds execute immediately when reached. Only `select`/`cond` branches are lazy. This means:
+- **Recursive calls** in binds cause infinite recursion (the classic mistake)
+- **`call get`** on potentially out-of-bounds indices in binds will return null and break downstream arithmetic
+- Any expression that should only run conditionally MUST go inside a `select`/`cond` branch
 
 **WRONG — infinite recursion:**
 ```
@@ -167,19 +170,34 @@ Binds are eagerly evaluated. `select`/`cond` branches are lazy.
   = select (== n 0) 0 v0
 ```
 
-**RIGHT:**
+**WRONG — `call get` on OOB index runs eagerly, returns null:**
+```
+#fn process :i32 lst:[i32] idx:i32
+  v0 :i32 = call get lst idx         -- runs even when idx is out of bounds!
+  = select (< idx (call len lst)) (* v0 2) 0
+```
+
+**RIGHT — guard with select:**
 ```
 #fn countdown :i32 n:i32
   = select (== n 0) 0 (call countdown (- n 1))
+
+#fn process :i32 lst:[i32] idx:i32
+  = select (< idx (call len lst)) (* (call get lst idx) 2) 0
 ```
 
-### 2.6 No string interpolation
+### 2.6 No string interpolation, no format specifiers
 
 AILang has NO string interpolation. Use `call fmt` with positional placeholders `{0}`, `{1}`, etc., or `call concat` / `+` for text concatenation.
 
+`fmt` supports ONLY positional placeholders `{0}`, `{1}`, etc. — no format specifiers like `:x`, `:08x`, `:2f`, etc.
+
 **WRONG:** `v0 :text = "Hello {name}"`
+**WRONG:** `v0 :text = call fmt "{0:08x}" val`  — no hex/width specifiers!
 **RIGHT:** `v0 :text = call fmt "Hello {0}" name`
 **RIGHT:** `v0 :text = + "Hello " name`
+
+To format a number as hex, you must write a conversion function yourself using arithmetic (`% n 16`, `/ n 16`, etc.).
 
 ### 2.7 `+` on lists does NOT work
 
@@ -207,9 +225,29 @@ call print v0
   = 0
 ```
 
-### 2.9 `#entry` must return a value
+### 2.9 `#entry` must return a value AND must be the LAST block
 
 The last statement in `#entry` must be `= EXPR` (typically `= 0`).
+
+`#entry` must appear after ALL `#fn`, `#test`, and `#err` blocks. Placing `#test` or `#fn` after `#entry` is a parse error.
+
+**WRONG:**
+```
+#entry
+  = 0
+
+#test my_test      -- ERROR: nothing can come after #entry
+  assert true
+```
+
+**RIGHT:**
+```
+#test my_test
+  assert true
+
+#entry
+  = 0
+```
 
 ### 2.10 SSA variables: `v0`, `v1`, `v2`... in order, never reused
 
@@ -223,6 +261,52 @@ Each variable assigned exactly once. Sequential numbering. Never skip. Never reu
 
 **WRONG:** `flat_map (fn x:i32 => [x (* x x)]) nums`
 **RIGHT:** `flatmap (fn x:i32 => [x (* x x)]) nums`
+
+### 2.12 `#const` only accepts LITERAL values
+
+`#const` takes a literal value — a number, string, bool, or a literal list/map. You CANNOT use computed expressions, function calls, `map`, `fold`, or any runtime evaluation.
+
+**WRONG:**
+```
+#const TABLE :[i32] = map (fn i:i32 => bxor 0xFF i) (call range 0 256)
+#const PI :f64 = / 355.0 113.0
+```
+
+**RIGHT — use literal values:**
+```
+#const MAX_SIZE :i32 = 256
+#const GREETING :text = "hello"
+#const PRIMES :[i32] = [2 3 5 7 11 13]
+```
+
+**RIGHT — compute tables at runtime inside a function:**
+```
+#fn make_table :[i32]
+  = map (fn i:i32 => bxor 0xFF i) (call range 0 256)
+```
+
+### 2.13 No field access or dot notation
+
+AILang has NO object field access. There is no `.` operator. You cannot write `v0.field`, `v0.error`, or `v0.value`.
+
+- For maps, use `call mget m "key"`
+- For lists, use `call get lst idx`
+- For error checking, use `call is "err" val` and `?` propagation
+- For tuples (returned by `pop`), use `call get tuple 0` / `call get tuple 1`
+
+**WRONG:** `v0.error`, `v0.value`, `result.data`
+**RIGHT:** `call mget v0 "error"`, `call get v0 0`, `call is "err" v0`
+
+### 2.14 `char_at` and `chars` return TEXT, not integers
+
+Character operations return single-character text strings, NOT integer code points. AILang has no char type.
+
+```
+v0 :text = call char_at "hello" 0    -- returns "h" (text), NOT 104 (int)
+v1 :[text] = call chars "hi"         -- returns ["h" "i"] (list of text)
+```
+
+There is no builtin to get a character's code point. `chr` goes the other direction (code point → text).
 
 ---
 
@@ -254,7 +338,8 @@ Each variable assigned exactly once. Sequential numbering. Never skip. Never reu
   = 0                            -- exit code
 ```
 
-**Block order:** `#use` → `#const` → `#fn` → `#test` → `#err` → `#entry`
+**Block order (MANDATORY):** `#use` → `#const` → `#fn` → `#test` → `#err` → `#entry`
+`#entry` is ALWAYS the last block. Nothing can appear after it.
 Functions must be defined before they are called (no forward references).
 
 ---
@@ -517,9 +602,9 @@ v0 :[i32] = map (fn i:i32 => 0) (call range 0 200)
 ```
 #fn sum :i32 lst:[i32] acc:i32 i:i32
   v0 :bool = >= i (call len lst)
-  v1 :i32 = + acc (call get lst i)
-  = select v0 acc (call sum lst v1 (+ i 1))
+  = select v0 acc (call sum lst (+ acc (call get lst i)) (+ i 1))
 ```
+Note: `call get` and the `+` are inside the `select` else-branch (lazy), so they only run when `i` is in bounds.
 
 ### Multi-value fold accumulator
 ```
@@ -651,18 +736,24 @@ Before submitting generated AILang code, verify:
 - [ ] All statements are single lines (no line breaks — especially `cond` with many args!)
 - [ ] Lambdas are single expressions (no binds inside)
 - [ ] Recursive calls are inside `select`/`cond` branches, not in binds
+- [ ] Potentially-OOB `call get` is inside `select`/`cond`, not in binds (eager eval!)
 - [ ] Variables are `v0`, `v1`, `v2`... sequential, no gaps, no reuse
 - [ ] Entry code is inside `#entry` block
+- [ ] `#entry` is the LAST block — nothing after it (no `#test`, `#fn`)
 - [ ] `#entry` ends with `= EXPR` (return value)
+- [ ] `#const` uses only literal values — no computed expressions, no `call`, no `map`
 - [ ] Functions defined before first use (no forward references)
 - [ ] Lists concatenated with `call append`, not `+`
 - [ ] Text concatenated with `+` or `call concat`
 - [ ] Sub-expressions in arguments wrapped in `()`
 - [ ] No string interpolation — use `call fmt "{0}" val`
+- [ ] No format specifiers in `fmt` — only `{0}`, `{1}`, no `{0:x}` or `{0:08d}`
+- [ ] No `.field` access — use `call mget`/`call get` instead
 - [ ] `flatmap` not `flat_map`
 - [ ] List elements space-separated: `[1 2 3]` not `[1, 2, 3]`
 - [ ] No `repeat` builtin — use `map (fn i:i32 => 0) (call range 0 N)`
 - [ ] `get` returns `null` on out-of-bounds (not error)
+- [ ] `char_at`/`chars` return text, not integers
 - [ ] `print` adds newline; `print_no_nl` does not
 - [ ] Bitwise ops use NAMES: `shr` not `>>`, `shl` not `<<`, `band` not `&`
 
