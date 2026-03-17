@@ -162,10 +162,10 @@
 - [ ] Prebuilt bindings for common libraries (SQLite, OpenSSL, CUDA, ONNX Runtime)
 
 ### Static Analysis
-- [ ] Compile-time recursion safety checks (detect recursive calls not guarded by `select`/`cond`)
+- [x] Linter: `ailang lint` command with `recursive-call-in-bind` detection (12 tests)
 - [ ] Structural hashing for memoization / caching of pure functions
 - [ ] Dataflow graph export (leverage SSA form for analysis tooling)
-- [ ] Linter: detect anti-patterns (Section 17 violations)
+- [ ] Linter: additional rules (unguarded OOB `get` in binds, unused variables)
 
 ### LSP & Tooling
 - [ ] Language Server Protocol implementation (autocomplete, diagnostics)

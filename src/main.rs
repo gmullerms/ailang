@@ -4,6 +4,7 @@ mod formatter;
 mod interpreter;
 mod json;
 mod lexer;
+mod linter;
 mod parser;
 mod token;
 mod warnings;
@@ -82,6 +83,16 @@ fn run() {
         return;
     }
 
+    // Handle `lint` subcommand: ailang lint <file.ai>
+    if positional[0] == "lint" {
+        if positional.len() < 2 {
+            eprintln!("usage: ailang lint <file.ai>");
+            process::exit(1);
+        }
+        run_lint(positional[1].as_str());
+        return;
+    }
+
     let (run_tests_only, file_path) = if positional[0] == "test" {
         if positional.len() < 2 {
             eprintln!("usage: ailang test <file.ai>");
@@ -141,6 +152,12 @@ fn run() {
         eprintln!("{}", w);
     }
 
+    // Run linter checks and emit warnings to stderr
+    let lint_warnings = linter::lint(&program);
+    for w in &lint_warnings {
+        eprintln!("{}", w);
+    }
+
     if run_tests_only {
         eprintln!("running tests...");
     }
@@ -178,6 +195,7 @@ fn print_help() {
     println!("  ailang [FLAGS] <file.ai>           Run a program");
     println!("  ailang [FLAGS] test <file.ai>      Run tests only (#test blocks)");
     println!("  ailang fmt <file.ai>               Format file in canonical form");
+    println!("  ailang lint <file.ai>              Check for common anti-patterns");
     println!("  ailang inspect <library>            List exported symbols from a shared library");
     println!("  ailang                              Launch interactive REPL");
     println!();
@@ -193,6 +211,7 @@ fn print_help() {
     println!("  ailang --sandbox examples/hello.ai");
     println!("  ailang -v test examples/hello.ai");
     println!("  ailang fmt examples/hello.ai");
+    println!("  ailang lint examples/hello.ai");
     println!("  ailang inspect mylib.dll");
 }
 
@@ -237,6 +256,47 @@ fn run_fmt(file_path: &str) {
             eprintln!("error writing '{}': {}", file_path, e);
             process::exit(1);
         }
+    }
+}
+
+fn run_lint(file_path: &str) {
+    let source = match fs::read_to_string(file_path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("error reading '{}': {}", file_path, e);
+            process::exit(1);
+        }
+    };
+
+    // Lex
+    let mut lex = lexer::Lexer::new(&source);
+    let tokens = match lex.tokenize() {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    // Parse
+    let mut par = parser::Parser::new(tokens);
+    let program = match par.parse() {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    // Run linter
+    let warnings = linter::lint(&program);
+    if warnings.is_empty() {
+        eprintln!("  no lint warnings");
+    } else {
+        for w in &warnings {
+            eprintln!("  {}", w);
+        }
+        process::exit(1);
     }
 }
 

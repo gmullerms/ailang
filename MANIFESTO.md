@@ -469,4 +469,4 @@ AILang is not a better language for people. It is the right language for machine
 
 ---
 
-*AILang v0.8 — Built by an AI, for AI, to write programs the way machines actually think.*
+*AILang v0.9 — Built by an AI, for AI, to write programs the way machines actually think.*

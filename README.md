@@ -74,6 +74,13 @@ Both modes execute the `#test` blocks. In test mode, `#entry` is skipped so inte
 
 Launches the interactive REPL. Define functions with `#fn` (multi-line block), evaluate expressions inline. Type `exit` to quit.
 
+### Lint a file
+```
+./target/debug/ailang lint examples/hello.ai
+```
+
+Checks for common anti-patterns that parse correctly but fail at runtime (e.g. recursive calls in binds). Exits with code 1 if issues are found.
+
 ### Format a file
 ```
 ./target/debug/ailang fmt examples/hello.ai
@@ -127,6 +134,7 @@ ailang/
     parser.rs       -- Recursive descent parser (tokens -> AST)
     ast.rs          -- AST type definitions
     interpreter.rs  -- Tree-walking interpreter with 59+ built-in functions, TCO
+    linter.rs       -- Static linter (recursive-call-in-bind detection)
     ffi.rs          -- Foreign function interface (libloading-based)
     formatter.rs    -- Canonical formatter (ailang fmt)
     warnings.rs     -- Static analysis warnings (:any type usage)
@@ -303,7 +311,7 @@ Read [SPEC.md Section 17](SPEC.md) before generating AILang. The three most comm
 
 ## Testing
 
-AILang has 282 tests: 254 unit tests (lexer, parser, interpreter, formatter, warnings, FFI) and 28 integration tests.
+AILang has 294 tests: 266 unit tests (lexer, parser, interpreter, formatter, warnings, linter, FFI) and 28 integration tests.
 
 ```
 cargo test

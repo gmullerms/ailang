@@ -1,4 +1,4 @@
-# AILang Specification v0.8
+# AILang Specification v0.9
 
 ## 1. Philosophy
 
@@ -821,7 +821,7 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - **Interpreter** (`src/interpreter.rs`) — immutable environments with scope chaining, built-in functions
 - **CLI** (`src/main.rs`) — `ailang <file.ai>` to run, `ailang test <file.ai>` to run tests
 
-### What's Implemented (v0.8)
+### What's Implemented (v0.9)
 - All block types: `#fn`, `#type`, `#enum`, `#const`, `#use`, `#entry`, `#test`, `#err`, `#extern`
 - All prefix operators: arithmetic, comparison, logic, bitwise
 - Control flow: `select` (lazy), `cond` (multi-way, lazy), `match` with patterns (literal, variant, wildcard)
@@ -841,6 +841,7 @@ The current implementation is a **tree-walking interpreter** written in Rust. It
 - Grouped sub-expressions
 - Tail-call optimization via trampoline (select, cond, match branches)
 - Canonical formatter: `ailang fmt` (SSA renaming, block ordering, idempotent)
+- Linter: `ailang lint` detects recursive calls in binds (unguarded by select/cond)
 - Sandbox mode: `--sandbox` restricts I/O builtins
 - Static warnings: `:any` type usage outside FFI/interop
 - Tests with `assert` (test-only mode skips `#entry`)
